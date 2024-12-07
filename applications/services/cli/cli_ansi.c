@@ -141,3 +141,16 @@ CliAnsiParserResult cli_ansi_parser_feed(CliAnsiParser* parser, char c) {
 
     return (CliAnsiParserResult){.is_done = false};
 }
+
+CliAnsiParserResult cli_ansi_parser_feed_timeout(CliAnsiParser* parser) {
+    CliAnsiParserResult result = {.is_done = false};
+
+    if(parser->state == CliAnsiParserStateEscape) {
+        result.is_done = true;
+        result.result.key = CliKeyEsc;
+        result.result.modifiers = CliModKeyNo;
+    }
+
+    parser->state = CliAnsiParserStateInitial;
+    return result;
+}

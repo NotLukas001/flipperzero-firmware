@@ -10,7 +10,6 @@ App(
         "cli_command_gpio.c",
         "cli_ansi.c",
     ],
-    sdk_headers=["cli.h"],
     order=0,
 )
 

@@ -8,9 +8,10 @@ extern "C" {
 
 // text styling
 
-#define ANSI_RESET "\e[0m"
-#define ANSI_BOLD  "\e[1m"
-#define ANSI_FAINT "\e[2m"
+#define ANSI_RESET  "\e[0m"
+#define ANSI_BOLD   "\e[1m"
+#define ANSI_FAINT  "\e[2m"
+#define ANSI_INVERT "\e[7m"
 
 #define ANSI_FG_BLACK      "\e[30m"
 #define ANSI_FG_RED        "\e[31m"
@@ -134,6 +135,18 @@ void cli_ansi_parser_free(CliAnsiParser* parser);
  * @brief Feeds an ANSI parser a character
  */
 CliAnsiParserResult cli_ansi_parser_feed(CliAnsiParser* parser, char c);
+
+/**
+ * @brief Feeds an ANSI parser a timeout event
+ * 
+ * As a user of the ANSI parses API, you are responsible for calling this
+ * function some time after the last character was fed into the parser. The
+ * recommended timeout is about 10 ms. The exact value does not matter as long
+ * as it is small enough for the user not notice a delay, but big enough that
+ * when a terminal is sending an escape sequence, this function does not get
+ * called in between the characters of the sequence.
+ */
+CliAnsiParserResult cli_ansi_parser_feed_timeout(CliAnsiParser* parser);
 
 #ifdef __cplusplus
 }

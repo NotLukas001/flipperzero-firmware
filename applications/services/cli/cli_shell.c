@@ -8,7 +8,11 @@
 
 #define TAG "CliShell"
 
-#define HISTORY_DEPTH 10
+#define HISTORY_DEPTH             10
+#define COMPLETION_COLUMNS        3
+#define COMPLETION_COLUMN_WIDTH   "30"
+#define COMPLETION_COLUMN_WIDTH_I 30
+#define ANSI_TIMEOUT_MS           10
 
 ARRAY_DEF(ShellHistory, FuriString*, FURI_STRING_OPLIST); // -V524
 #define M_OPL_ShellHistory_t() ARRAY_OPLIST(ShellHistory)
@@ -19,10 +23,15 @@ typedef struct {
     FuriEventLoop* event_loop;
     FuriPipeSide* pipe;
     CliAnsiParser* ansi_parser;
+    FuriEventLoopTimer* ansi_parsing_timer;
 
     size_t history_position;
     size_t line_position;
     ShellHistory_t history;
+
+    CommandCompletions_t completions;
+    size_t selected_completion;
+    bool is_displaying_completions;
 } CliShell;
 
 typedef struct {
@@ -36,7 +45,7 @@ static int32_t cli_command_thread(void* context) {
     if(!(thread_data->command->flags & CliCommandFlagDontAttachStdio))
         furi_pipe_install_as_stdio(thread_data->pipe);
 
-    thread_data->command->callback(
+    thread_data->command->execute_callback(
         thread_data->pipe, thread_data->args, thread_data->command->context);
 
     fflush(stdout);
@@ -50,7 +59,7 @@ static void cli_shell_execute_command(CliShell* cli_shell, FuriString* command) 
     FuriString* command_name = furi_string_alloc_set(command);
     furi_string_left(command_name, space);
     FuriString* args = furi_string_alloc_set(command);
-    furi_string_right(args, space + 1); // FIXME:
+    furi_string_right(args, space + 1);
 
     // find handler
     CliCommand command_data;
@@ -159,7 +168,7 @@ typedef enum {
 } CliSkipDirection;
 
 /**
- * @brief Skips a run of a class of characters
+ * @brief Skips a run of characters of the same class
  * 
  * @param string Input string
  * @param original_pos Position to start the search at
@@ -189,24 +198,224 @@ static size_t cli_skip_run(FuriString* string, size_t original_pos, CliSkipDirec
     return MAX(0, position);
 }
 
-static void cli_shell_data_available(FuriEventLoopObject* object, void* context) {
-    UNUSED(object);
-    CliShell* cli_shell = context;
-    UNUSED(cli_shell);
+/**
+ * @brief Update for the completions menu
+ */
+typedef enum {
+    CliShellCompletionsActionOpen,
+    CliShellCompletionsActionClose,
+    CliShellCompletionsActionUp,
+    CliShellCompletionsActionDown,
+    CliShellCompletionsActionLeft,
+    CliShellCompletionsActionRight,
+    CliShellCompletionsActionInput,
+    CliShellCompletionsActionSelect,
+} CliShellCompletionsAction;
 
-    // process ANSI escape sequences
-    int c = getchar();
-    furi_assert(c >= 0);
-    CliAnsiParserResult parse_result = cli_ansi_parser_feed(cli_shell->ansi_parser, c);
-    if(!parse_result.is_done) return;
-    CliKeyCombo key_combo = parse_result.result;
-    if(key_combo.key == CliKeyUnrecognized) return;
+typedef enum {
+    CliShellCompletionSegmentTypeCommand,
+    CliShellCompletionSegmentTypeArguments,
+} CliShellCompletionSegmentType;
+
+typedef struct {
+    CliShellCompletionSegmentType type;
+    size_t start;
+    size_t length;
+} CliShellCompletionSegment;
+
+static CliShellCompletionSegment cli_shell_completion_segment(CliShell* cli_shell) {
+    CliShellCompletionSegment segment;
+
+    FuriString* input = furi_string_alloc_set(*ShellHistory_front(cli_shell->history));
+    furi_string_left(input, cli_shell->line_position);
+
+    // find index of first non-space character
+    size_t first_non_space = 0;
+    while(1) {
+        size_t ret = furi_string_search_char(input, ' ', first_non_space);
+        if(ret == FURI_STRING_FAILURE) break;
+        if(ret - first_non_space > 1) break;
+        first_non_space++;
+    }
+
+    size_t first_space_in_command = furi_string_search_char(input, ' ', first_non_space);
+
+    if(first_space_in_command == FURI_STRING_FAILURE) {
+        segment.type = CliShellCompletionSegmentTypeCommand;
+        segment.start = first_non_space;
+        segment.length = furi_string_size(input) - first_non_space;
+    } else {
+        segment.type = CliShellCompletionSegmentTypeArguments;
+        furi_crash("TODO:");
+    }
+
+    furi_string_free(input);
+    return segment;
+}
+
+static void cli_shell_fill_completions(CliShell* cli_shell) {
+    CommandCompletions_reset(cli_shell->completions);
+
+    CliShellCompletionSegment segment = cli_shell_completion_segment(cli_shell);
+    FuriString* input = furi_string_alloc_set(*ShellHistory_front(cli_shell->history));
+    furi_string_right(input, segment.start);
+    furi_string_left(input, segment.length);
+
+    if(segment.type == CliShellCompletionSegmentTypeCommand) {
+        CliCommandTree_t* commands = cli_get_commands(cli_shell->cli);
+        for
+            M_EACH(registered_command, *commands, CliCommandTree_t) {
+                FuriString* command_name = *registered_command->key_ptr;
+                if(furi_string_start_with(command_name, input)) {
+                    CommandCompletions_push_back(cli_shell->completions, command_name);
+                }
+            }
+
+    } else {
+        furi_crash("TODO:");
+    }
+
+    furi_string_free(input);
+}
+
+static void cli_shell_completions_render(CliShell* cli_shell, CliShellCompletionsAction action) {
+    furi_assert(cli_shell);
+    if(action == CliShellCompletionsActionOpen) furi_check(!cli_shell->is_displaying_completions);
+    if(action == CliShellCompletionsActionInput) furi_check(cli_shell->is_displaying_completions);
+    if(action == CliShellCompletionsActionClose) furi_check(cli_shell->is_displaying_completions);
+
+    char prompt[64];
+    cli_shell_format_prompt(cli_shell, prompt, sizeof(prompt));
+
+    if(action == CliShellCompletionsActionOpen || action == CliShellCompletionsActionInput) {
+        // show or update completions menu (full re-render)
+        cli_shell_fill_completions(cli_shell);
+        cli_shell->selected_completion = 0;
+
+        printf("\n\r");
+        size_t position = 0;
+        for
+            M_EACH(completion, cli_shell->completions, CommandCompletions_t) {
+                if(position == cli_shell->selected_completion) printf(ANSI_INVERT);
+                printf("%-" COMPLETION_COLUMN_WIDTH "s", furi_string_get_cstr(*completion));
+                if(position == cli_shell->selected_completion) printf(ANSI_RESET);
+                if((position % COMPLETION_COLUMNS == COMPLETION_COLUMNS - 1) &&
+                   position != CommandCompletions_size(cli_shell->completions)) {
+                    printf("\r\n");
+                }
+                position++;
+            }
+
+        if(!position) {
+            printf(ANSI_FG_RED "no completions" ANSI_RESET);
+        }
+
+        size_t total_rows = (position / COMPLETION_COLUMNS) + 1;
+        printf(
+            ANSI_ERASE_DISPLAY(ANSI_ERASE_FROM_CURSOR_TO_END) ANSI_CURSOR_UP_BY("%zu")
+                ANSI_CURSOR_HOR_POS("%zu"),
+            total_rows,
+            strlen(prompt) + cli_shell->line_position + 1);
+
+        cli_shell->is_displaying_completions = true;
+
+    } else if(action == CliShellCompletionsActionClose) {
+        // clear completions menu
+        printf(
+            ANSI_CURSOR_HOR_POS("%zu") ANSI_ERASE_DISPLAY(ANSI_ERASE_FROM_CURSOR_TO_END)
+                ANSI_CURSOR_HOR_POS("%zu"),
+            strlen(prompt) +
+                furi_string_size(
+                    *ShellHistory_cget(cli_shell->history, cli_shell->history_position)) +
+                1,
+            strlen(prompt) + cli_shell->line_position + 1);
+        cli_shell->is_displaying_completions = false;
+
+    } else if(
+        action == CliShellCompletionsActionUp || action == CliShellCompletionsActionDown ||
+        action == CliShellCompletionsActionLeft || action == CliShellCompletionsActionRight) {
+        if(CommandCompletions_empty_p(cli_shell->completions)) return;
+
+        // move selection
+        size_t old_selection = cli_shell->selected_completion;
+        int new_selection_unclamped = cli_shell->selected_completion;
+        if(action == CliShellCompletionsActionUp) new_selection_unclamped -= COMPLETION_COLUMNS;
+        if(action == CliShellCompletionsActionDown) new_selection_unclamped += COMPLETION_COLUMNS;
+        if(action == CliShellCompletionsActionLeft) new_selection_unclamped--;
+        if(action == CliShellCompletionsActionRight) new_selection_unclamped++;
+        size_t new_selection = CLAMP_WRAPAROUND(
+            new_selection_unclamped, (int)CommandCompletions_size(cli_shell->completions) - 1, 0);
+        cli_shell->selected_completion = new_selection;
+
+        if(new_selection != old_selection) {
+            // determine selection coordinates relative to top-left of suggestion menu
+            size_t old_x = (old_selection % COMPLETION_COLUMNS) * COMPLETION_COLUMN_WIDTH_I;
+            size_t old_y = old_selection / COMPLETION_COLUMNS;
+            size_t new_x = (new_selection % COMPLETION_COLUMNS) * COMPLETION_COLUMN_WIDTH_I;
+            size_t new_y = new_selection / COMPLETION_COLUMNS;
+            printf("\n\r");
+
+            // print old selection in normal colors
+            if(old_y) printf(ANSI_CURSOR_DOWN_BY("%zu"), old_y);
+            printf(ANSI_CURSOR_HOR_POS("%zu"), old_x + 1);
+            printf(
+                "%-" COMPLETION_COLUMN_WIDTH "s",
+                furi_string_get_cstr(
+                    *CommandCompletions_cget(cli_shell->completions, old_selection)));
+            if(old_y) printf(ANSI_CURSOR_UP_BY("%zu"), old_y);
+            printf(ANSI_CURSOR_HOR_POS("1"));
+
+            // print new selection in inverted colors
+            if(new_y) printf(ANSI_CURSOR_DOWN_BY("%zu"), new_y);
+            printf(ANSI_CURSOR_HOR_POS("%zu"), new_x + 1);
+            printf(
+                ANSI_INVERT "%-" COMPLETION_COLUMN_WIDTH "s" ANSI_RESET,
+                furi_string_get_cstr(
+                    *CommandCompletions_cget(cli_shell->completions, new_selection)));
+
+            // return cursor
+            printf(ANSI_CURSOR_UP_BY("%zu"), new_y + 1);
+            printf(
+                ANSI_CURSOR_HOR_POS("%zu"),
+                strlen(prompt) +
+                    furi_string_size(
+                        *ShellHistory_cget(cli_shell->history, cli_shell->history_position)) +
+                    1);
+        }
+
+    } else if(action == CliShellCompletionsActionSelect) {
+        // insert selection into prompt
+        CliShellCompletionSegment segment = cli_shell_completion_segment(cli_shell);
+        FuriString* input = *ShellHistory_cget(cli_shell->history, cli_shell->history_position);
+        FuriString* completion =
+            *CommandCompletions_cget(cli_shell->completions, cli_shell->selected_completion);
+        furi_string_replace_at(
+            input, segment.start, segment.length, furi_string_get_cstr(completion));
+        printf(
+            ANSI_CURSOR_HOR_POS("%zu") "%s" ANSI_ERASE_LINE(ANSI_ERASE_FROM_CURSOR_TO_END),
+            strlen(prompt) + 1,
+            furi_string_get_cstr(input));
+
+        int position_change = (int)furi_string_size(completion) - (int)segment.length;
+        cli_shell->line_position = MAX(0, (int)cli_shell->line_position + position_change);
+
+        cli_shell_completions_render(cli_shell, CliShellCompletionsActionClose);
+
+    } else {
+        furi_crash();
+    }
+
+    fflush(stdout);
+}
+
+static void cli_shell_process_key(CliShell* cli_shell, CliKeyCombo key_combo) {
     FURI_LOG_T(
         TAG, "mod=%d, key=%d='%c'", key_combo.modifiers, key_combo.key, (char)key_combo.key);
 
-    // do things the user requests
     if(key_combo.modifiers == 0 && key_combo.key == CliKeyETX) { // usually Ctrl+C
         // reset input
+        if(cli_shell->is_displaying_completions)
+            cli_shell_completions_render(cli_shell, CliShellCompletionsActionClose);
         furi_string_reset(*ShellHistory_front(cli_shell->history));
         cli_shell->line_position = 0;
         cli_shell->history_position = 0;
@@ -216,7 +425,7 @@ static void cli_shell_data_available(FuriEventLoopObject* object, void* context)
     } else if(key_combo.modifiers == 0 && key_combo.key == CliKeyFF) { // usually Ctrl+L
         // clear screen
         FuriString* command = *ShellHistory_cget(cli_shell->history, cli_shell->history_position);
-        char prompt[128];
+        char prompt[64];
         cli_shell_format_prompt(cli_shell, prompt, sizeof(prompt));
         printf(
             ANSI_ERASE_DISPLAY(ANSI_ERASE_ENTIRE) ANSI_ERASE_SCROLLBACK_BUFFER ANSI_CURSOR_POS(
@@ -227,71 +436,98 @@ static void cli_shell_data_available(FuriEventLoopObject* object, void* context)
         fflush(stdout);
 
     } else if(key_combo.modifiers == 0 && key_combo.key == CliKeyCR) {
-        // get command and update history
-        FuriString* command = furi_string_alloc();
-        ShellHistory_pop_at(&command, cli_shell->history, cli_shell->history_position);
-        furi_string_trim(command);
-        if(cli_shell->history_position > 0) ShellHistory_pop_at(NULL, cli_shell->history, 0);
-        if(!furi_string_empty(command)) ShellHistory_push_at(cli_shell->history, 0, command);
-        FuriString* new_command = furi_string_alloc();
-        ShellHistory_push_at(cli_shell->history, 0, new_command);
-        furi_string_free(new_command);
-        if(ShellHistory_size(cli_shell->history) > HISTORY_DEPTH) {
-            ShellHistory_pop_back(NULL, cli_shell->history);
+        if(cli_shell->is_displaying_completions) {
+            // select completion
+            cli_shell_completions_render(cli_shell, CliShellCompletionsActionSelect);
+        } else {
+            // get command and update history
+            FuriString* command = furi_string_alloc();
+            ShellHistory_pop_at(&command, cli_shell->history, cli_shell->history_position);
+            furi_string_trim(command);
+            if(cli_shell->history_position > 0) ShellHistory_pop_at(NULL, cli_shell->history, 0);
+            if(!furi_string_empty(command)) ShellHistory_push_at(cli_shell->history, 0, command);
+            FuriString* new_command = furi_string_alloc();
+            ShellHistory_push_at(cli_shell->history, 0, new_command);
+            furi_string_free(new_command);
+            if(ShellHistory_size(cli_shell->history) > HISTORY_DEPTH) {
+                ShellHistory_pop_back(NULL, cli_shell->history);
+            }
+
+            // execute command
+            cli_shell->line_position = 0;
+            cli_shell->history_position = 0;
+            printf("\r\n");
+            if(!furi_string_empty(command)) cli_shell_execute_command(cli_shell, command);
+            furi_string_free(command);
+            cli_shell_prompt(cli_shell);
         }
 
-        // execute command
-        cli_shell->line_position = 0;
-        cli_shell->history_position = 0;
-        printf("\r\n");
-        cli_shell_execute_command(cli_shell, command);
-        furi_string_free(command);
-        cli_shell_prompt(cli_shell);
-
     } else if(key_combo.modifiers == 0 && (key_combo.key == CliKeyUp || key_combo.key == CliKeyDown)) {
-        // go up and down in history
-        int increment = (key_combo.key == CliKeyUp) ? 1 : -1;
-        size_t new_pos = CLAMP(
-            (int)cli_shell->history_position + increment,
-            (int)ShellHistory_size(cli_shell->history) - 1,
-            0);
+        if(cli_shell->is_displaying_completions) {
+            cli_shell_completions_render(
+                cli_shell,
+                (key_combo.key == CliKeyUp) ? CliShellCompletionsActionUp :
+                                              CliShellCompletionsActionDown);
+        } else {
+            // go up and down in history
+            int increment = (key_combo.key == CliKeyUp) ? 1 : -1;
+            size_t new_pos = CLAMP(
+                (int)cli_shell->history_position + increment,
+                (int)ShellHistory_size(cli_shell->history) - 1,
+                0);
 
-        // print prompt with selected command
-        if(new_pos != cli_shell->history_position) {
-            cli_shell->history_position = new_pos;
-            FuriString* command =
-                *ShellHistory_cget(cli_shell->history, cli_shell->history_position);
-            printf(
-                ANSI_CURSOR_HOR_POS("1") ">: %s" ANSI_ERASE_LINE(ANSI_ERASE_FROM_CURSOR_TO_END),
-                furi_string_get_cstr(command));
-            fflush(stdout);
-            cli_shell->line_position = furi_string_size(command);
+            // print prompt with selected command
+            if(new_pos != cli_shell->history_position) {
+                cli_shell->history_position = new_pos;
+                FuriString* command =
+                    *ShellHistory_cget(cli_shell->history, cli_shell->history_position);
+                printf(
+                    ANSI_CURSOR_HOR_POS("1") ">: %s" ANSI_ERASE_LINE(
+                        ANSI_ERASE_FROM_CURSOR_TO_END),
+                    furi_string_get_cstr(command));
+                fflush(stdout);
+                cli_shell->line_position = furi_string_size(command);
+            }
         }
 
     } else if(
         key_combo.modifiers == 0 &&
         (key_combo.key == CliKeyLeft || key_combo.key == CliKeyRight)) {
-        // go left and right in the current line
-        FuriString* command = *ShellHistory_cget(cli_shell->history, cli_shell->history_position);
-        int increment = (key_combo.key == CliKeyRight) ? 1 : -1;
-        size_t new_pos =
-            CLAMP((int)cli_shell->line_position + increment, (int)furi_string_size(command), 0);
+        if(cli_shell->is_displaying_completions) {
+            cli_shell_completions_render(
+                cli_shell,
+                (key_combo.key == CliKeyLeft) ? CliShellCompletionsActionLeft :
+                                                CliShellCompletionsActionRight);
 
-        // move cursor
-        if(new_pos != cli_shell->line_position) {
-            cli_shell->line_position = new_pos;
-            printf("%s", (increment == 1) ? ANSI_CURSOR_RIGHT_BY("1") : ANSI_CURSOR_LEFT_BY("1"));
-            fflush(stdout);
+        } else {
+            // go left and right in the current line
+            FuriString* command =
+                *ShellHistory_cget(cli_shell->history, cli_shell->history_position);
+            int increment = (key_combo.key == CliKeyRight) ? 1 : -1;
+            size_t new_pos = CLAMP(
+                (int)cli_shell->line_position + increment, (int)furi_string_size(command), 0);
+
+            // move cursor
+            if(new_pos != cli_shell->line_position) {
+                cli_shell->line_position = new_pos;
+                printf(
+                    "%s", (increment == 1) ? ANSI_CURSOR_RIGHT_BY("1") : ANSI_CURSOR_LEFT_BY("1"));
+                fflush(stdout);
+            }
         }
 
     } else if(key_combo.modifiers == 0 && key_combo.key == CliKeyHome) {
         // go to the start
+        if(cli_shell->is_displaying_completions)
+            cli_shell_completions_render(cli_shell, CliShellCompletionsActionClose);
         cli_shell->line_position = 0;
         printf(ANSI_CURSOR_HOR_POS("%d"), cli_shell_prompt_length(cli_shell) + 1);
         fflush(stdout);
 
     } else if(key_combo.modifiers == 0 && key_combo.key == CliKeyEnd) {
         // go to the end
+        if(cli_shell->is_displaying_completions)
+            cli_shell_completions_render(cli_shell, CliShellCompletionsActionClose);
         FuriString* line = *ShellHistory_cget(cli_shell->history, cli_shell->history_position);
         cli_shell->line_position = furi_string_size(line);
         printf(
@@ -322,10 +558,15 @@ static void cli_shell_data_available(FuriEventLoopObject* object, void* context)
             printf(ANSI_CURSOR_LEFT_BY("%zu"), left_by);
         fflush(stdout);
 
+        if(cli_shell->is_displaying_completions)
+            cli_shell_completions_render(cli_shell, CliShellCompletionsActionInput);
+
     } else if(
         key_combo.modifiers == CliModKeyCtrl &&
         (key_combo.key == CliKeyLeft || key_combo.key == CliKeyRight)) {
         // skip run of similar chars to the left or right
+        if(cli_shell->is_displaying_completions)
+            cli_shell_completions_render(cli_shell, CliShellCompletionsActionClose);
         FuriString* line = *ShellHistory_cget(cli_shell->history, cli_shell->history_position);
         CliSkipDirection direction = (key_combo.key == CliKeyLeft) ? CliSkipDirectionLeft :
                                                                      CliSkipDirectionRight;
@@ -350,6 +591,22 @@ static void cli_shell_data_available(FuriEventLoopObject* object, void* context)
             cli_shell_prompt_length(cli_shell) + run_start + 1);
         fflush(stdout);
 
+        if(cli_shell->is_displaying_completions)
+            cli_shell_completions_render(cli_shell, CliShellCompletionsActionInput);
+
+    } else if(key_combo.modifiers == 0 && key_combo.key == CliKeyTab) {
+        // display completions
+        cli_shell_ensure_not_overwriting_history(cli_shell);
+        cli_shell_completions_render(
+            cli_shell,
+            cli_shell->is_displaying_completions ? CliShellCompletionsActionRight :
+                                                   CliShellCompletionsActionOpen);
+
+    } else if(key_combo.modifiers == 0 && key_combo.key == CliKeyEsc) {
+        // close completions menu
+        if(cli_shell->is_displaying_completions)
+            cli_shell_completions_render(cli_shell, CliShellCompletionsActionClose);
+
     } else if(key_combo.modifiers == 0 && key_combo.key >= CliKeySpace && key_combo.key < CliKeyDEL) {
         // insert character
         cli_shell_ensure_not_overwriting_history(cli_shell);
@@ -364,7 +621,37 @@ static void cli_shell_data_available(FuriEventLoopObject* object, void* context)
         }
         fflush(stdout);
         cli_shell->line_position++;
+
+        if(cli_shell->is_displaying_completions)
+            cli_shell_completions_render(cli_shell, CliShellCompletionsActionInput);
     }
+}
+
+static void cli_shell_data_available(FuriEventLoopObject* object, void* context) {
+    UNUSED(object);
+    CliShell* cli_shell = context;
+
+    furi_event_loop_timer_start(cli_shell->ansi_parsing_timer, furi_ms_to_ticks(ANSI_TIMEOUT_MS));
+
+    // process ANSI escape sequences
+    int c = getchar();
+    furi_assert(c >= 0);
+    CliAnsiParserResult parse_result = cli_ansi_parser_feed(cli_shell->ansi_parser, c);
+    if(!parse_result.is_done) return;
+    CliKeyCombo key_combo = parse_result.result;
+    if(key_combo.key == CliKeyUnrecognized) return;
+
+    cli_shell_process_key(cli_shell, key_combo);
+}
+
+static void cli_shell_timer_expired(void* context) {
+    CliShell* cli_shell = context;
+    CliAnsiParserResult parse_result = cli_ansi_parser_feed_timeout(cli_shell->ansi_parser);
+    if(!parse_result.is_done) return;
+    CliKeyCombo key_combo = parse_result.result;
+    if(key_combo.key == CliKeyUnrecognized) return;
+
+    cli_shell_process_key(cli_shell, key_combo);
 }
 
 static CliShell* cli_shell_alloc(FuriPipeSide* pipe) {
@@ -386,12 +673,20 @@ static CliShell* cli_shell_alloc(FuriPipeSide* pipe) {
         cli_shell_data_available,
         cli_shell);
 
+    cli_shell->ansi_parsing_timer = furi_event_loop_timer_alloc(
+        cli_shell->event_loop, cli_shell_timer_expired, FuriEventLoopTimerTypeOnce, cli_shell);
+
     furi_event_loop_tick_set(cli_shell->event_loop, 1, cli_shell_tick, cli_shell);
+
+    CommandCompletions_init(cli_shell->completions);
+    cli_shell->selected_completion = 0;
 
     return cli_shell;
 }
 
 static void cli_shell_free(CliShell* cli_shell) {
+    CommandCompletions_clear(cli_shell->completions);
+    furi_event_loop_timer_free(cli_shell->ansi_parsing_timer);
     furi_event_loop_unsubscribe(cli_shell->event_loop, cli_shell->pipe);
     furi_pipe_free(cli_shell->pipe);
     ShellHistory_clear(cli_shell->history);

@@ -14,12 +14,6 @@
 
 #define VCP_MESSAGE_Q_LEN 8
 
-// #ifdef VCP_TRACE
-#define VCP_LOG_T(...) FURI_LOG_T(__VA_ARGS__)
-// #else
-// #define VCP_LOG_T(...)
-// #endif
-
 typedef struct {
     enum {
         CliVcpMessageTypeEnable,
@@ -66,7 +60,7 @@ static void cli_vcp_maybe_send_data(CliVcp* cli_vcp) {
     uint8_t buf[USB_CDC_PKT_LEN];
     size_t length = furi_pipe_receive(cli_vcp->own_pipe, buf, sizeof(buf), 0);
     if(length > 0 || cli_vcp->previous_tx_length == USB_CDC_PKT_LEN) {
-        VCP_LOG_T(TAG, "cdc_send length=%zu", length);
+        FURI_LOG_T(TAG, "cdc_send length=%zu", length);
         cli_vcp->is_currently_transmitting = true;
         furi_hal_cdc_send(VCP_IF_NUM, buf, length);
     }
@@ -84,7 +78,7 @@ static void cli_vcp_maybe_receive_data(CliVcp* cli_vcp) {
 
     uint8_t buf[USB_CDC_PKT_LEN];
     size_t length = furi_hal_cdc_receive(VCP_IF_NUM, buf, sizeof(buf));
-    VCP_LOG_T(TAG, "cdc_receive length=%zu", length);
+    FURI_LOG_T(TAG, "cdc_receive length=%zu", length);
     furi_check(furi_pipe_send(cli_vcp->own_pipe, buf, length, 0) == length);
 }
 
@@ -145,7 +139,7 @@ static void cli_vcp_data_from_shell(FuriEventLoopObject* object, void* context) 
 static void cli_vcp_shell_ready(FuriEventLoopObject* object, void* context) {
     UNUSED(object);
     CliVcp* cli_vcp = context;
-    VCP_LOG_T(TAG, "shell_ready");
+    FURI_LOG_T(TAG, "shell_ready");
     cli_vcp_maybe_receive_data(cli_vcp);
 }
 
@@ -191,13 +185,13 @@ static void cli_vcp_internal_message_received(FuriEventLoopObject* object, void*
 
     switch(message) {
     case CliVcpInternalMessageTxDone:
-        VCP_LOG_T(TAG, "TxDone");
+        FURI_LOG_T(TAG, "TxDone");
         cli_vcp->is_currently_transmitting = false;
         cli_vcp_maybe_send_data(cli_vcp);
         break;
 
     case CliVcpInternalMessageRx:
-        VCP_LOG_T(TAG, "Rx");
+        FURI_LOG_T(TAG, "Rx");
         cli_vcp_maybe_receive_data(cli_vcp);
         break;
 

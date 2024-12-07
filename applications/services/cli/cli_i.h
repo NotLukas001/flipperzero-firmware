@@ -13,12 +13,6 @@
 extern "C" {
 #endif
 
-typedef struct {
-    CliCallback callback;
-    void* context;
-    CliCommandFlag flags;
-} CliCommand;
-
 #define CLI_COMMANDS_TREE_RANK 4
 
 // -V:BPTREE_DEF2:1103
