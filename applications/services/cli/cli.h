@@ -60,46 +60,6 @@ void cli_add_command(
     CliExecuteCallback callback,
     void* context);
 
-ARRAY_DEF(CommandCompletions, FuriString*, FURI_STRING_OPLIST); // -V524
-#define M_OPL_CommandCompletions_t() ARRAY_OPLIST(CommandCompletions)
-
-/**
- * @brief Command autocomplete callback.
- * 
- * This callback will be called from the shell thread.
- * 
- * @param [in] partial_args Input after the name of the command up to the point
- *                          where TAB was pressed.
- * @param [out] full_args   An initialized empty array that you fill up with
- *                          suggestions for the entire `args`.
- */
-typedef void (*CliCompleteCallback)(
-    PipeSide* pipe,
-    FuriString* partial_args,
-    CommandCompletions_t full_args,
-    void* context);
-
-/**
- * @brief Extended command descriptor for `cli_add_command_ex`
- */
-typedef struct {
-    const char* name; //<! Command name
-    void* context; //<! Context passed to callbacks
-    CliExecuteCallback execute_callback; //<! Callback for command execution
-    CliCompleteCallback complete_callback; //<! Callback for command completion. May be `NULL`
-    CliCommandFlag flags;
-} CliCommand;
-
-/**
- * @brief Registers a command with the CLI. Provides more options than
- *        `cli_add_command`
- * 
- * @param [in] cli       Pointer to CLI instance
- * @param [in] command   Pointer to command descriptor. Not required to be valid
- *                       after this function returns.
- */
-void cli_add_command_ex(Cli* cli, CliCommand* command);
-
 /**
  * @brief Deletes a cli command
  *

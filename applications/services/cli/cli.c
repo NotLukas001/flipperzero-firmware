@@ -22,31 +22,24 @@ void cli_add_command(
     CliCommandFlag flags,
     CliExecuteCallback callback,
     void* context) {
-    // missing checks performed by cli_add_command_ex
-
-    CliCommand cmd = {
-        .name = name,
-        .context = context,
-        .execute_callback = callback,
-        .complete_callback = NULL,
-        .flags = flags,
-    };
-    cli_add_command_ex(cli, &cmd);
-}
-
-void cli_add_command_ex(Cli* cli, CliCommand* command) {
     furi_check(cli);
-    furi_check(command);
-    furi_check(command->name);
-    furi_check(command->execute_callback);
+    furi_check(name);
+    furi_check(callback);
 
     FuriString* name_str;
-    name_str = furi_string_alloc_set(command->name);
+    name_str = furi_string_alloc_set(name);
     // command cannot contain spaces
     furi_check(furi_string_search_char(name_str, ' ') == FURI_STRING_FAILURE);
 
+    CliCommand command = {
+        .name = name,
+        .context = context,
+        .execute_callback = callback,
+        .flags = flags,
+    };
+
     furi_check(furi_mutex_acquire(cli->mutex, FuriWaitForever) == FuriStatusOk);
-    CliCommandTree_set_at(cli->commands, name_str, *command);
+    CliCommandTree_set_at(cli->commands, name_str, command);
     furi_check(furi_mutex_release(cli->mutex) == FuriStatusOk);
 
     furi_string_free(name_str);
@@ -75,7 +68,7 @@ bool cli_get_command(Cli* cli, FuriString* command, CliCommand* result) {
     furi_check(furi_mutex_acquire(cli->mutex, FuriWaitForever) == FuriStatusOk);
     CliCommand* data = CliCommandTree_get(cli->commands, command);
     if(data) *result = *data;
-  
+
     furi_check(furi_mutex_release(cli->mutex) == FuriStatusOk);
 
     return !!data;

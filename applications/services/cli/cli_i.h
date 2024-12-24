@@ -13,9 +13,17 @@
 extern "C" {
 #endif
 
+typedef struct {
+    const char* name; //<! Command name
+    void* context; //<! Context passed to callbacks
+    CliExecuteCallback execute_callback; //<! Callback for command execution
+    CliCommandFlag flags;
+} CliCommand;
+
 #define CLI_COMMANDS_TREE_RANK 4
 
 // -V:BPTREE_DEF2:1103
+// -V:BPTREE_DEF2:524
 BPTREE_DEF2(
     CliCommandTree,
     CLI_COMMANDS_TREE_RANK,
@@ -23,8 +31,10 @@ BPTREE_DEF2(
     FURI_STRING_OPLIST,
     CliCommand,
     M_POD_OPLIST);
-
 #define M_OPL_CliCommandTree_t() BPTREE_OPLIST(CliCommandTree, M_POD_OPLIST)
+
+ARRAY_DEF(CommandCompletions, FuriString*, FURI_STRING_OPLIST); // -V524
+#define M_OPL_CommandCompletions_t() ARRAY_OPLIST(CommandCompletions)
 
 bool cli_get_command(Cli* cli, FuriString* command, CliCommand* result);
 
