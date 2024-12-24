@@ -73,10 +73,9 @@ void cli_delete_command(Cli* cli, const char* name) {
 bool cli_get_command(Cli* cli, FuriString* command, CliCommand* result) {
     furi_assert(cli);
     furi_check(furi_mutex_acquire(cli->mutex, FuriWaitForever) == FuriStatusOk);
-
     CliCommand* data = CliCommandTree_get(cli->commands, command);
     if(data) *result = *data;
-
+  
     furi_check(furi_mutex_release(cli->mutex) == FuriStatusOk);
 
     return !!data;

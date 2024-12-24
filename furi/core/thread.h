@@ -492,6 +492,13 @@ void furi_thread_get_stdout_callback(FuriThreadStdoutWriteCallback* callback, vo
  */
 void furi_thread_get_stdin_callback(FuriThreadStdinReadCallback* callback, void** context);
 
+/**
+ * @brief Get the standard input callback for the current thead.
+ *
+ * @return pointer to the standard in callback function
+ */
+FuriThreadStdinReadCallback furi_thread_get_stdin_callback(void);
+
 /** Set standard output callback for the current thread.
  *
  * @param[in] callback pointer to the callback function or NULL to clear

@@ -73,7 +73,6 @@ void test_stdin(void) {
 static FuriString* mock_out;
 static FuriThreadStdoutWriteCallback original_out_cb;
 static void* original_out_ctx;
-
 static void mock_out_cb(const char* data, size_t size, void* context) {
     furi_check(context == CONTEXT_MAGIC);
     // there's no furi_string_cat_strn :(
