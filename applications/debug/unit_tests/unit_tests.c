@@ -1,9 +1,10 @@
 #include <furi.h>
 #include <cli/cli.h>
+#include <toolbox/pipe.h>
 
 #include "test_runner.h"
 
-void unit_tests_cli(FuriPipeSide* pipe, FuriString* args, void* context) {
+void unit_tests_cli(PipeSide* pipe, FuriString* args, void* context) {
     UNUSED(context);
 
     TestRunner* test_runner = test_runner_alloc(pipe, args);

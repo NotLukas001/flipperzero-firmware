@@ -3,6 +3,7 @@
 #include <furi.h>
 #include <cli/cli.h>
 #include <toolbox/args.h>
+#include <toolbox/pipe.h>
 
 static void input_cli_usage(void) {
     printf("Usage:\r\n");
@@ -19,7 +20,7 @@ static void input_cli_dump_events_callback(const void* value, void* ctx) {
     furi_message_queue_put(input_queue, value, FuriWaitForever);
 }
 
-static void input_cli_dump(FuriPipeSide* pipe, FuriString* args, FuriPubSub* event_pubsub) {
+static void input_cli_dump(PipeSide* pipe, FuriString* args, FuriPubSub* event_pubsub) {
     UNUSED(args);
     FuriMessageQueue* input_queue = furi_message_queue_alloc(8, sizeof(InputEvent));
     FuriPubSubSubscription* input_subscription =
@@ -47,7 +48,7 @@ static void input_cli_send_print_usage(void) {
     printf("\t\t <type>\t - one of 'press', 'release', 'short', 'long'\r\n");
 }
 
-static void input_cli_send(FuriPipeSide* pipe, FuriString* args, FuriPubSub* event_pubsub) {
+static void input_cli_send(PipeSide* pipe, FuriString* args, FuriPubSub* event_pubsub) {
     UNUSED(pipe);
     InputEvent event;
     FuriString* key_str;
@@ -97,7 +98,7 @@ static void input_cli_send(FuriPipeSide* pipe, FuriString* args, FuriPubSub* eve
     furi_string_free(key_str);
 }
 
-void input_cli(FuriPipeSide* pipe, FuriString* args, void* context) {
+void input_cli(PipeSide* pipe, FuriString* args, void* context) {
     furi_assert(context);
     FuriPubSub* event_pubsub = context;
     FuriString* cmd;

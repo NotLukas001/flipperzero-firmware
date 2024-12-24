@@ -2,13 +2,14 @@
 #include <furi_hal.h>
 #include <cli/cli.h>
 #include <lib/toolbox/args.h>
+#include <toolbox/pipe.h>
 
 #include <ble/ble.h>
 #include "bt_settings.h"
 #include "bt_service/bt.h"
 #include <profiles/serial_profile.h>
 
-static void bt_cli_command_hci_info(FuriPipeSide* pipe, FuriString* args, void* context) {
+static void bt_cli_command_hci_info(PipeSide* pipe, FuriString* args, void* context) {
     UNUSED(pipe);
     UNUSED(args);
     UNUSED(context);
@@ -19,7 +20,7 @@ static void bt_cli_command_hci_info(FuriPipeSide* pipe, FuriString* args, void* 
     furi_string_free(buffer);
 }
 
-static void bt_cli_command_carrier_tx(FuriPipeSide* pipe, FuriString* args, void* context) {
+static void bt_cli_command_carrier_tx(PipeSide* pipe, FuriString* args, void* context) {
     UNUSED(context);
     int channel = 0;
     int power = 0;
@@ -51,7 +52,7 @@ static void bt_cli_command_carrier_tx(FuriPipeSide* pipe, FuriString* args, void
     } while(false);
 }
 
-static void bt_cli_command_carrier_rx(FuriPipeSide* pipe, FuriString* args, void* context) {
+static void bt_cli_command_carrier_rx(PipeSide* pipe, FuriString* args, void* context) {
     UNUSED(context);
     int channel = 0;
 
@@ -82,7 +83,7 @@ static void bt_cli_command_carrier_rx(FuriPipeSide* pipe, FuriString* args, void
     } while(false);
 }
 
-static void bt_cli_command_packet_tx(FuriPipeSide* pipe, FuriString* args, void* context) {
+static void bt_cli_command_packet_tx(PipeSide* pipe, FuriString* args, void* context) {
     UNUSED(context);
     int channel = 0;
     int pattern = 0;
@@ -130,7 +131,7 @@ static void bt_cli_command_packet_tx(FuriPipeSide* pipe, FuriString* args, void*
     } while(false);
 }
 
-static void bt_cli_command_packet_rx(FuriPipeSide* pipe, FuriString* args, void* context) {
+static void bt_cli_command_packet_rx(PipeSide* pipe, FuriString* args, void* context) {
     UNUSED(context);
     int channel = 0;
     int datarate = 1;
@@ -179,7 +180,7 @@ static void bt_cli_print_usage(void) {
     }
 }
 
-static void bt_cli(FuriPipeSide* pipe, FuriString* args, void* context) {
+static void bt_cli(PipeSide* pipe, FuriString* args, void* context) {
     UNUSED(context);
     furi_record_open(RECORD_BT);
 

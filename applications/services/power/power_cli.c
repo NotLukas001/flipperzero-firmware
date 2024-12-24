@@ -4,8 +4,9 @@
 #include <cli/cli.h>
 #include <lib/toolbox/args.h>
 #include <power/power_service/power.h>
+#include <toolbox/pipe.h>
 
-void power_cli_off(FuriPipeSide* pipe, FuriString* args) {
+void power_cli_off(PipeSide* pipe, FuriString* args) {
     UNUSED(pipe);
     UNUSED(args);
     Power* power = furi_record_open(RECORD_POWER);
@@ -14,21 +15,21 @@ void power_cli_off(FuriPipeSide* pipe, FuriString* args) {
     power_off(power);
 }
 
-void power_cli_reboot(FuriPipeSide* pipe, FuriString* args) {
+void power_cli_reboot(PipeSide* pipe, FuriString* args) {
     UNUSED(pipe);
     UNUSED(args);
     Power* power = furi_record_open(RECORD_POWER);
     power_reboot(power, PowerBootModeNormal);
 }
 
-void power_cli_reboot2dfu(FuriPipeSide* pipe, FuriString* args) {
+void power_cli_reboot2dfu(PipeSide* pipe, FuriString* args) {
     UNUSED(pipe);
     UNUSED(args);
     Power* power = furi_record_open(RECORD_POWER);
     power_reboot(power, PowerBootModeDfu);
 }
 
-void power_cli_5v(FuriPipeSide* pipe, FuriString* args) {
+void power_cli_5v(PipeSide* pipe, FuriString* args) {
     UNUSED(pipe);
     if(!furi_string_cmp(args, "0")) {
         furi_hal_power_disable_otg();
@@ -39,7 +40,7 @@ void power_cli_5v(FuriPipeSide* pipe, FuriString* args) {
     }
 }
 
-void power_cli_3v3(FuriPipeSide* pipe, FuriString* args) {
+void power_cli_3v3(PipeSide* pipe, FuriString* args) {
     UNUSED(pipe);
     if(!furi_string_cmp(args, "0")) {
         furi_hal_power_disable_external_3_3v();
@@ -64,7 +65,7 @@ static void power_cli_command_print_usage(void) {
     }
 }
 
-void power_cli(FuriPipeSide* pipe, FuriString* args, void* context) {
+void power_cli(PipeSide* pipe, FuriString* args, void* context) {
     UNUSED(context);
     FuriString* cmd;
     cmd = furi_string_alloc();

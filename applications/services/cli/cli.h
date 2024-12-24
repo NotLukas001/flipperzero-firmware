@@ -7,6 +7,7 @@
 #include <furi.h>
 #include <m-array.h>
 #include "cli_ansi.h"
+#include <toolbox/pipe.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -40,7 +41,7 @@ typedef struct Cli Cli;
  * @param [in] args     String with what was passed after the command
  * @param [in] context  Whatever you provided to `cli_add_command`
  */
-typedef void (*CliExecuteCallback)(FuriPipeSide* pipe, FuriString* args, void* context);
+typedef void (*CliExecuteCallback)(PipeSide* pipe, FuriString* args, void* context);
 
 /**
  * @brief Registers a command with the CLI. Provides less options than
@@ -73,7 +74,7 @@ ARRAY_DEF(CommandCompletions, FuriString*, FURI_STRING_OPLIST); // -V524
  *                          suggestions for the entire `args`.
  */
 typedef void (*CliCompleteCallback)(
-    FuriPipeSide* pipe,
+    PipeSide* pipe,
     FuriString* partial_args,
     CommandCompletions_t full_args,
     void* context);
@@ -115,7 +116,7 @@ void cli_delete_command(Cli* cli, const char* name);
  *          thread's stdio
  * @warning This function will consume 0 or 1 bytes from the pipe
  */
-bool cli_app_should_stop(FuriPipeSide* side);
+bool cli_app_should_stop(PipeSide* side);
 
 /** Print unified cmd usage tip
  *

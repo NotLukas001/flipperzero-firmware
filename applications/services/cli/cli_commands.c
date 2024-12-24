@@ -13,6 +13,7 @@
 #include <loader/loader.h>
 #include <lib/toolbox/args.h>
 #include <lib/toolbox/strint.h>
+#include <toolbox/pipe.h>
 
 // Close to ISO, `date +'%Y-%m-%d %H:%M:%S %u'`
 #define CLI_DATE_FORMAT "%.4d-%.2d-%.2d %.2d:%.2d:%.2d %d"
@@ -36,7 +37,7 @@ void cli_command_info_callback(const char* key, const char* value, bool last, vo
  * @param      args     The arguments
  * @param      context  The context
  */
-void cli_command_info(FuriPipeSide* pipe, FuriString* args, void* context) {
+void cli_command_info(PipeSide* pipe, FuriString* args, void* context) {
     UNUSED(pipe);
 
     if(context) {
@@ -55,7 +56,7 @@ void cli_command_info(FuriPipeSide* pipe, FuriString* args, void* context) {
     }
 }
 
-void cli_command_help(FuriPipeSide* pipe, FuriString* args, void* context) {
+void cli_command_help(PipeSide* pipe, FuriString* args, void* context) {
     UNUSED(pipe);
     UNUSED(args);
     UNUSED(context);
@@ -96,7 +97,7 @@ void cli_command_help(FuriPipeSide* pipe, FuriString* args, void* context) {
     furi_record_close(RECORD_CLI);
 }
 
-void cli_command_uptime(FuriPipeSide* pipe, FuriString* args, void* context) {
+void cli_command_uptime(PipeSide* pipe, FuriString* args, void* context) {
     UNUSED(pipe);
     UNUSED(args);
     UNUSED(context);
@@ -104,7 +105,7 @@ void cli_command_uptime(FuriPipeSide* pipe, FuriString* args, void* context) {
     printf("Uptime: %luh%lum%lus", uptime / 60 / 60, uptime / 60 % 60, uptime % 60);
 }
 
-void cli_command_date(FuriPipeSide* pipe, FuriString* args, void* context) {
+void cli_command_date(PipeSide* pipe, FuriString* args, void* context) {
     UNUSED(pipe);
     UNUSED(context);
 
@@ -177,8 +178,8 @@ void cli_command_date(FuriPipeSide* pipe, FuriString* args, void* context) {
 #define CLI_COMMAND_LOG_BUFFER_SIZE 64
 
 void cli_command_log_tx_callback(const uint8_t* buffer, size_t size, void* context) {
-    FuriPipeSide* pipe = context;
-    furi_pipe_send(pipe, buffer, size, FuriWaitForever);
+    PipeSide* pipe = context;
+    pipe_send(pipe, buffer, size, FuriWaitForever);
 }
 
 bool cli_command_log_level_set_from_string(FuriString* level) {
@@ -200,7 +201,7 @@ bool cli_command_log_level_set_from_string(FuriString* level) {
     return false;
 }
 
-void cli_command_log(FuriPipeSide* pipe, FuriString* args, void* context) {
+void cli_command_log(PipeSide* pipe, FuriString* args, void* context) {
     UNUSED(context);
     FuriLogLevel previous_level = furi_log_get_level();
     bool restore_log_level = false;
@@ -237,7 +238,7 @@ void cli_command_log(FuriPipeSide* pipe, FuriString* args, void* context) {
     }
 }
 
-void cli_command_sysctl_debug(FuriPipeSide* pipe, FuriString* args, void* context) {
+void cli_command_sysctl_debug(PipeSide* pipe, FuriString* args, void* context) {
     UNUSED(pipe);
     UNUSED(context);
     if(!furi_string_cmp(args, "0")) {
@@ -251,7 +252,7 @@ void cli_command_sysctl_debug(FuriPipeSide* pipe, FuriString* args, void* contex
     }
 }
 
-void cli_command_sysctl_heap_track(FuriPipeSide* pipe, FuriString* args, void* context) {
+void cli_command_sysctl_heap_track(PipeSide* pipe, FuriString* args, void* context) {
     UNUSED(pipe);
     UNUSED(context);
     if(!furi_string_cmp(args, "none")) {
@@ -286,7 +287,7 @@ void cli_command_sysctl_print_usage(void) {
 #endif
 }
 
-void cli_command_sysctl(FuriPipeSide* pipe, FuriString* args, void* context) {
+void cli_command_sysctl(PipeSide* pipe, FuriString* args, void* context) {
     FuriString* cmd;
     cmd = furi_string_alloc();
 
@@ -312,7 +313,7 @@ void cli_command_sysctl(FuriPipeSide* pipe, FuriString* args, void* context) {
     furi_string_free(cmd);
 }
 
-void cli_command_vibro(FuriPipeSide* pipe, FuriString* args, void* context) {
+void cli_command_vibro(PipeSide* pipe, FuriString* args, void* context) {
     UNUSED(pipe);
     UNUSED(context);
 
@@ -339,7 +340,7 @@ void cli_command_vibro(FuriPipeSide* pipe, FuriString* args, void* context) {
     }
 }
 
-void cli_command_led(FuriPipeSide* pipe, FuriString* args, void* context) {
+void cli_command_led(PipeSide* pipe, FuriString* args, void* context) {
     UNUSED(pipe);
     UNUSED(context);
     // Get first word as light name
@@ -394,7 +395,7 @@ void cli_command_led(FuriPipeSide* pipe, FuriString* args, void* context) {
     furi_record_close(RECORD_NOTIFICATION);
 }
 
-static void cli_command_top(FuriPipeSide* pipe, FuriString* args, void* context) {
+static void cli_command_top(PipeSide* pipe, FuriString* args, void* context) {
     UNUSED(context);
 
     int interval = 1000;
@@ -466,7 +467,7 @@ static void cli_command_top(FuriPipeSide* pipe, FuriString* args, void* context)
     furi_thread_list_free(thread_list);
 }
 
-void cli_command_free(FuriPipeSide* pipe, FuriString* args, void* context) {
+void cli_command_free(PipeSide* pipe, FuriString* args, void* context) {
     UNUSED(pipe);
     UNUSED(args);
     UNUSED(context);
@@ -480,7 +481,7 @@ void cli_command_free(FuriPipeSide* pipe, FuriString* args, void* context) {
     printf("Maximum pool block: %zu\r\n", memmgr_pool_get_max_block());
 }
 
-void cli_command_free_blocks(FuriPipeSide* pipe, FuriString* args, void* context) {
+void cli_command_free_blocks(PipeSide* pipe, FuriString* args, void* context) {
     UNUSED(pipe);
     UNUSED(args);
     UNUSED(context);
@@ -488,7 +489,7 @@ void cli_command_free_blocks(FuriPipeSide* pipe, FuriString* args, void* context
     memmgr_heap_printf_free_blocks();
 }
 
-void cli_command_i2c(FuriPipeSide* pipe, FuriString* args, void* context) {
+void cli_command_i2c(PipeSide* pipe, FuriString* args, void* context) {
     UNUSED(pipe);
     UNUSED(args);
     UNUSED(context);

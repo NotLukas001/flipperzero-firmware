@@ -2,6 +2,7 @@
 #include "cli_i.h"
 #include "cli_commands.h"
 #include "cli_ansi.h"
+#include <toolbox/pipe.h>
 
 struct Cli {
     CliCommandTree_t commands;
@@ -96,9 +97,9 @@ CliCommandTree_t* cli_get_commands(Cli* cli) {
     return &cli->commands;
 }
 
-bool cli_app_should_stop(FuriPipeSide* side) {
-    if(furi_pipe_state(side) == FuriPipeStateBroken) return true;
-    if(!furi_pipe_bytes_available(side)) return false;
+bool cli_app_should_stop(PipeSide* side) {
+    if(pipe_state(side) == PipeStateBroken) return true;
+    if(!pipe_bytes_available(side)) return false;
     char c = getchar();
     return c == CliKeyETX;
 }

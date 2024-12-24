@@ -4,6 +4,7 @@
 #include <furi_hal.h>
 #include <furi.h>
 #include <stdint.h>
+#include <toolbox/pipe.h>
 
 #define TAG "CliVcp"
 
@@ -37,7 +38,7 @@ struct CliVcp {
     bool is_enabled, is_connected;
     FuriHalUsbInterface* previous_interface;
 
-    FuriPipeSide* own_pipe;
+    PipeSide* own_pipe;
     bool is_currently_transmitting;
     size_t previous_tx_length;
 
@@ -58,7 +59,7 @@ static void cli_vcp_maybe_send_data(CliVcp* cli_vcp) {
     if(!cli_vcp->own_pipe) return;
 
     uint8_t buf[USB_CDC_PKT_LEN];
-    size_t length = furi_pipe_receive(cli_vcp->own_pipe, buf, sizeof(buf), 0);
+    size_t length = pipe_receive(cli_vcp->own_pipe, buf, sizeof(buf), 0);
     if(length > 0 || cli_vcp->previous_tx_length == USB_CDC_PKT_LEN) {
         FURI_LOG_T(TAG, "cdc_send length=%zu", length);
         cli_vcp->is_currently_transmitting = true;
@@ -74,12 +75,12 @@ static void cli_vcp_maybe_send_data(CliVcp* cli_vcp) {
  */
 static void cli_vcp_maybe_receive_data(CliVcp* cli_vcp) {
     if(!cli_vcp->own_pipe) return;
-    if(furi_pipe_spaces_available(cli_vcp->own_pipe) < USB_CDC_PKT_LEN) return;
+    if(pipe_spaces_available(cli_vcp->own_pipe) < USB_CDC_PKT_LEN) return;
 
     uint8_t buf[USB_CDC_PKT_LEN];
     size_t length = furi_hal_cdc_receive(VCP_IF_NUM, buf, sizeof(buf));
     FURI_LOG_T(TAG, "cdc_receive length=%zu", length);
-    furi_check(furi_pipe_send(cli_vcp->own_pipe, buf, length, 0) == length);
+    furi_check(pipe_send(cli_vcp->own_pipe, buf, length, 0) == length);
 }
 
 // =============
@@ -126,20 +127,19 @@ static CdcCallbacks cdc_callbacks = {
     .config_callback = NULL,
 };
 
-// ==================
-// EventLoop handlers
-// ==================
+// ======================
+// Pipe callback handlers
+// ======================
 
-static void cli_vcp_data_from_shell(FuriEventLoopObject* object, void* context) {
-    UNUSED(object);
+static void cli_vcp_data_from_shell(PipeSide* pipe, void* context) {
+    UNUSED(pipe);
     CliVcp* cli_vcp = context;
     cli_vcp_maybe_send_data(cli_vcp);
 }
 
-static void cli_vcp_shell_ready(FuriEventLoopObject* object, void* context) {
-    UNUSED(object);
+static void cli_vcp_shell_ready(PipeSide* pipe, void* context) {
+    UNUSED(pipe);
     CliVcp* cli_vcp = context;
-    FURI_LOG_T(TAG, "shell_ready");
     cli_vcp_maybe_receive_data(cli_vcp);
 }
 
@@ -201,8 +201,8 @@ static void cli_vcp_internal_message_received(FuriEventLoopObject* object, void*
         cli_vcp->is_connected = false;
 
         // disconnect our side of the pipe
-        furi_event_loop_unsubscribe(cli_vcp->event_loop, cli_vcp->own_pipe);
-        furi_pipe_free(cli_vcp->own_pipe);
+        pipe_detach_from_event_loop(cli_vcp->own_pipe);
+        pipe_free(cli_vcp->own_pipe);
         cli_vcp->own_pipe = NULL;
         break;
 
@@ -219,22 +219,16 @@ static void cli_vcp_internal_message_received(FuriEventLoopObject* object, void*
         }
 
         // start shell thread
-        FuriPipe pipe = furi_pipe_alloc(VCP_BUF_SIZE, 1);
-        cli_vcp->own_pipe = pipe.alices_side;
-        furi_event_loop_subscribe_pipe(
-            cli_vcp->event_loop,
-            cli_vcp->own_pipe,
-            FuriEventLoopEventIn | FuriEventLoopEventFlagEdge,
-            cli_vcp_data_from_shell,
-            cli_vcp);
-        furi_event_loop_subscribe_pipe(
-            cli_vcp->event_loop,
-            cli_vcp->own_pipe,
-            FuriEventLoopEventOut | FuriEventLoopEventFlagEdge,
-            cli_vcp_shell_ready,
-            cli_vcp);
+        PipeSideBundle bundle = pipe_alloc(VCP_BUF_SIZE, 1);
+        cli_vcp->own_pipe = bundle.alices_side;
+        pipe_attach_to_event_loop(cli_vcp->own_pipe, cli_vcp->event_loop);
+        pipe_set_callback_context(cli_vcp->own_pipe, cli_vcp);
+        pipe_set_data_arrived_callback(
+            cli_vcp->own_pipe, cli_vcp_data_from_shell, FuriEventLoopEventFlagEdge);
+        pipe_set_space_freed_callback(
+            cli_vcp->own_pipe, cli_vcp_shell_ready, FuriEventLoopEventFlagEdge);
         furi_delay_ms(33); // we are too fast, minicom isn't ready yet
-        cli_vcp->shell = cli_shell_start(pipe.bobs_side);
+        cli_vcp->shell = cli_shell_start(bundle.bobs_side);
         break;
     }
 }

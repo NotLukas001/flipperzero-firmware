@@ -3,6 +3,7 @@
 #include <cli/cli.h>
 #include <lib/toolbox/args.h>
 #include <lib/toolbox/hex.h>
+#include <toolbox/pipe.h>
 
 #include <furi_hal_nfc.h>
 
@@ -17,7 +18,7 @@ static void nfc_cli_print_usage(void) {
     }
 }
 
-static void nfc_cli_field(FuriPipeSide* pipe, FuriString* args) {
+static void nfc_cli_field(PipeSide* pipe, FuriString* args) {
     UNUSED(args);
     // Check if nfc worker is not busy
     if(furi_hal_nfc_is_hal_ready() != FuriHalNfcErrorNone) {
@@ -40,7 +41,7 @@ static void nfc_cli_field(FuriPipeSide* pipe, FuriString* args) {
     furi_hal_nfc_release();
 }
 
-static void nfc_cli(FuriPipeSide* pipe, FuriString* args, void* context) {
+static void nfc_cli(PipeSide* pipe, FuriString* args, void* context) {
     UNUSED(context);
     FuriString* cmd;
     cmd = furi_string_alloc();

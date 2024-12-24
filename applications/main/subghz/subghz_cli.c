@@ -17,6 +17,7 @@
 
 #include <lib/toolbox/args.h>
 #include <lib/toolbox/strint.h>
+#include <toolbox/pipe.h>
 
 #include "helpers/subghz_chat.h"
 
@@ -69,7 +70,7 @@ static SubGhzEnvironment* subghz_cli_environment_init(void) {
     return environment;
 }
 
-void subghz_cli_command_tx_carrier(FuriPipeSide* pipe, FuriString* args, void* context) {
+void subghz_cli_command_tx_carrier(PipeSide* pipe, FuriString* args, void* context) {
     UNUSED(context);
     uint32_t frequency = 433920000;
 
@@ -112,7 +113,7 @@ void subghz_cli_command_tx_carrier(FuriPipeSide* pipe, FuriString* args, void* c
     furi_hal_power_suppress_charge_exit();
 }
 
-void subghz_cli_command_rx_carrier(FuriPipeSide* pipe, FuriString* args, void* context) {
+void subghz_cli_command_rx_carrier(PipeSide* pipe, FuriString* args, void* context) {
     UNUSED(context);
     uint32_t frequency = 433920000;
 
@@ -173,7 +174,7 @@ static const SubGhzDevice* subghz_cli_command_get_device(uint32_t* device_ind) {
     return device;
 }
 
-void subghz_cli_command_tx(FuriPipeSide* pipe, FuriString* args, void* context) {
+void subghz_cli_command_tx(PipeSide* pipe, FuriString* args, void* context) {
     UNUSED(context);
     uint32_t frequency = 433920000;
     uint32_t key = 0x0074BADE;
@@ -300,7 +301,7 @@ static void subghz_cli_command_rx_callback(
     furi_string_free(text);
 }
 
-void subghz_cli_command_rx(FuriPipeSide* pipe, FuriString* args, void* context) {
+void subghz_cli_command_rx(PipeSide* pipe, FuriString* args, void* context) {
     UNUSED(context);
     uint32_t frequency = 433920000;
     uint32_t device_ind = 0; // 0 - CC1101_INT, 1 - CC1101_EXT
@@ -389,7 +390,7 @@ void subghz_cli_command_rx(FuriPipeSide* pipe, FuriString* args, void* context) 
     free(instance);
 }
 
-void subghz_cli_command_rx_raw(FuriPipeSide* pipe, FuriString* args, void* context) {
+void subghz_cli_command_rx_raw(PipeSide* pipe, FuriString* args, void* context) {
     UNUSED(context);
     uint32_t frequency = 433920000;
 
@@ -463,7 +464,7 @@ void subghz_cli_command_rx_raw(FuriPipeSide* pipe, FuriString* args, void* conte
     free(instance);
 }
 
-void subghz_cli_command_decode_raw(FuriPipeSide* pipe, FuriString* args, void* context) {
+void subghz_cli_command_decode_raw(PipeSide* pipe, FuriString* args, void* context) {
     UNUSED(context);
     FuriString* file_name;
     file_name = furi_string_alloc();
@@ -578,7 +579,7 @@ static FuriHalSubGhzPreset subghz_cli_get_preset_name(const char* preset_name) {
     return preset;
 }
 
-void subghz_cli_command_tx_from_file(FuriPipeSide* pipe, FuriString* args, void* context) { // -V524
+void subghz_cli_command_tx_from_file(PipeSide* pipe, FuriString* args, void* context) { // -V524
     UNUSED(context);
     FuriString* file_name;
     file_name = furi_string_alloc();
@@ -844,7 +845,7 @@ static void subghz_cli_command_print_usage(void) {
     }
 }
 
-static void subghz_cli_command_encrypt_keeloq(FuriPipeSide* pipe, FuriString* args) {
+static void subghz_cli_command_encrypt_keeloq(PipeSide* pipe, FuriString* args) {
     UNUSED(pipe);
     uint8_t iv[16];
 
@@ -887,7 +888,7 @@ static void subghz_cli_command_encrypt_keeloq(FuriPipeSide* pipe, FuriString* ar
     furi_string_free(source);
 }
 
-static void subghz_cli_command_encrypt_raw(FuriPipeSide* pipe, FuriString* args) {
+static void subghz_cli_command_encrypt_raw(PipeSide* pipe, FuriString* args) {
     UNUSED(pipe);
     uint8_t iv[16];
 
@@ -924,7 +925,7 @@ static void subghz_cli_command_encrypt_raw(FuriPipeSide* pipe, FuriString* args)
     furi_string_free(source);
 }
 
-static void subghz_cli_command_chat(FuriPipeSide* pipe, FuriString* args) {
+static void subghz_cli_command_chat(PipeSide* pipe, FuriString* args) {
     uint32_t frequency = 433920000;
     uint32_t device_ind = 0; // 0 - CC1101_INT, 1 - CC1101_EXT
 
@@ -1119,7 +1120,7 @@ static void subghz_cli_command_chat(FuriPipeSide* pipe, FuriString* args) {
     printf("\r\nExit chat\r\n");
 }
 
-static void subghz_cli_command(FuriPipeSide* pipe, FuriString* args, void* context) {
+static void subghz_cli_command(PipeSide* pipe, FuriString* args, void* context) {
     FuriString* cmd;
     cmd = furi_string_alloc();
 

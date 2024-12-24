@@ -6,6 +6,7 @@
 #include <flipper_format.h>
 #include <toolbox/args.h>
 #include <toolbox/strint.h>
+#include <toolbox/pipe.h>
 #include <m-dict.h>
 
 #include "infrared_signal.h"
@@ -19,14 +20,14 @@
 
 DICT_DEF2(dict_signals, FuriString*, FURI_STRING_OPLIST, int, M_DEFAULT_OPLIST)
 
-static void infrared_cli_start_ir_rx(FuriPipeSide* pipe, FuriString* args);
-static void infrared_cli_start_ir_tx(FuriPipeSide* pipe, FuriString* args);
-static void infrared_cli_process_decode(FuriPipeSide* pipe, FuriString* args);
-static void infrared_cli_process_universal(FuriPipeSide* pipe, FuriString* args);
+static void infrared_cli_start_ir_rx(PipeSide* pipe, FuriString* args);
+static void infrared_cli_start_ir_tx(PipeSide* pipe, FuriString* args);
+static void infrared_cli_process_decode(PipeSide* pipe, FuriString* args);
+static void infrared_cli_process_universal(PipeSide* pipe, FuriString* args);
 
 static const struct {
     const char* cmd;
-    void (*process_function)(FuriPipeSide* pipe, FuriString* args);
+    void (*process_function)(PipeSide* pipe, FuriString* args);
 } infrared_cli_commands[] = {
     {.cmd = "rx", .process_function = infrared_cli_start_ir_rx},
     {.cmd = "tx", .process_function = infrared_cli_start_ir_tx},
@@ -38,7 +39,7 @@ static void signal_received_callback(void* context, InfraredWorkerSignal* receiv
     furi_assert(received_signal);
     char buf[100];
     size_t buf_cnt;
-    FuriPipeSide* pipe = (FuriPipeSide*)context;
+    PipeSide* pipe = (PipeSide*)context;
 
     if(infrared_worker_signal_is_decoded(received_signal)) {
         const InfraredMessage* message = infrared_worker_get_decoded_signal(received_signal);
@@ -52,20 +53,20 @@ static void signal_received_callback(void* context, InfraredWorkerSignal* receiv
             ROUND_UP_TO(infrared_get_protocol_command_length(message->protocol), 4),
             message->command,
             message->repeat ? " R" : "");
-        furi_pipe_send(pipe, buf, buf_cnt, FuriWaitForever);
+        pipe_send(pipe, buf, buf_cnt, FuriWaitForever);
     } else {
         const uint32_t* timings;
         size_t timings_cnt;
         infrared_worker_get_raw_signal(received_signal, &timings, &timings_cnt);
 
         buf_cnt = snprintf(buf, sizeof(buf), "RAW, %zu samples:\r\n", timings_cnt);
-        furi_pipe_send(pipe, buf, buf_cnt, FuriWaitForever);
+        pipe_send(pipe, buf, buf_cnt, FuriWaitForever);
         for(size_t i = 0; i < timings_cnt; ++i) {
             buf_cnt = snprintf(buf, sizeof(buf), "%lu ", timings[i]);
-            furi_pipe_send(pipe, buf, buf_cnt, FuriWaitForever);
+            pipe_send(pipe, buf, buf_cnt, FuriWaitForever);
         }
         buf_cnt = snprintf(buf, sizeof(buf), "\r\n");
-        furi_pipe_send(pipe, buf, buf_cnt, FuriWaitForever);
+        pipe_send(pipe, buf, buf_cnt, FuriWaitForever);
     }
 }
 
@@ -124,7 +125,7 @@ static void infrared_cli_print_usage(void) {
     infrared_cli_print_universal_remotes();
 }
 
-static void infrared_cli_start_ir_rx(FuriPipeSide* pipe, FuriString* args) {
+static void infrared_cli_start_ir_rx(PipeSide* pipe, FuriString* args) {
     bool enable_decoding = true;
 
     if(!furi_string_empty(args)) {
@@ -212,7 +213,7 @@ static bool infrared_cli_parse_raw(const char* str, InfraredSignal* signal) {
     return infrared_signal_is_valid(signal);
 }
 
-static void infrared_cli_start_ir_tx(FuriPipeSide* pipe, FuriString* args) {
+static void infrared_cli_start_ir_tx(PipeSide* pipe, FuriString* args) {
     UNUSED(pipe);
     const char* str = furi_string_get_cstr(args);
     InfraredSignal* signal = infrared_signal_alloc();
@@ -333,7 +334,7 @@ static bool infrared_cli_decode_file(FlipperFormat* input_file, FlipperFormat* o
     return ret;
 }
 
-static void infrared_cli_process_decode(FuriPipeSide* pipe, FuriString* args) {
+static void infrared_cli_process_decode(PipeSide* pipe, FuriString* args) {
     UNUSED(pipe);
     Storage* storage = furi_record_open(RECORD_STORAGE);
     FlipperFormat* input_file = flipper_format_buffered_file_alloc(storage);
@@ -454,7 +455,7 @@ static void infrared_cli_list_remote_signals(FuriString* remote_name) {
 }
 
 static void infrared_cli_brute_force_signals(
-    FuriPipeSide* pipe,
+    PipeSide* pipe,
     FuriString* remote_name,
     FuriString* signal_name) {
     InfraredBruteForce* brute_force = infrared_brute_force_alloc();
@@ -505,7 +506,7 @@ static void infrared_cli_brute_force_signals(
     infrared_brute_force_free(brute_force);
 }
 
-static void infrared_cli_process_universal(FuriPipeSide* pipe, FuriString* args) {
+static void infrared_cli_process_universal(PipeSide* pipe, FuriString* args) {
     FuriString* arg1 = furi_string_alloc();
     FuriString* arg2 = furi_string_alloc();
 
@@ -527,7 +528,7 @@ static void infrared_cli_process_universal(FuriPipeSide* pipe, FuriString* args)
     furi_string_free(arg2);
 }
 
-static void infrared_cli_start_ir(FuriPipeSide* pipe, FuriString* args, void* context) {
+static void infrared_cli_start_ir(PipeSide* pipe, FuriString* args, void* context) {
     UNUSED(context);
     if(furi_hal_infrared_is_busy()) {
         printf("INFRARED is busy. Exiting.");

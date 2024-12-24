@@ -6,6 +6,7 @@
 #include <lib/lfrfid/lfrfid_worker.h>
 #include <storage/storage.h>
 #include <toolbox/stream/file_stream.h>
+#include <toolbox/pipe.h>
 
 #include <toolbox/varint.h>
 
@@ -14,7 +15,7 @@
 #include <lfrfid/lfrfid_raw_file.h>
 #include <toolbox/pulse_protocols/pulse_glue.h>
 
-static void lfrfid_cli(FuriPipeSide* pipe, FuriString* args, void* context);
+static void lfrfid_cli(PipeSide* pipe, FuriString* args, void* context);
 
 // app cli function
 void lfrfid_on_system_start(void) {
@@ -49,7 +50,7 @@ static void lfrfid_cli_read_callback(LFRFIDWorkerReadResult result, ProtocolId p
     furi_event_flag_set(context->event, 1 << result);
 }
 
-static void lfrfid_cli_read(FuriPipeSide* pipe, FuriString* args) {
+static void lfrfid_cli_read(PipeSide* pipe, FuriString* args) {
     FuriString* type_string;
     type_string = furi_string_alloc();
     LFRFIDWorkerReadType type = LFRFIDWorkerReadTypeAuto;
@@ -192,7 +193,7 @@ static void lfrfid_cli_write_callback(LFRFIDWorkerWriteResult result, void* ctx)
     furi_event_flag_set(events, 1 << result);
 }
 
-static void lfrfid_cli_write(FuriPipeSide* pipe, FuriString* args) {
+static void lfrfid_cli_write(PipeSide* pipe, FuriString* args) {
     ProtocolDict* dict = protocol_dict_alloc(lfrfid_protocols, LFRFIDProtocolMax);
     ProtocolId protocol;
 
@@ -239,7 +240,7 @@ static void lfrfid_cli_write(FuriPipeSide* pipe, FuriString* args) {
     furi_event_flag_free(event);
 }
 
-static void lfrfid_cli_emulate(FuriPipeSide* pipe, FuriString* args) {
+static void lfrfid_cli_emulate(PipeSide* pipe, FuriString* args) {
     ProtocolDict* dict = protocol_dict_alloc(lfrfid_protocols, LFRFIDProtocolMax);
     ProtocolId protocol;
 
@@ -265,7 +266,7 @@ static void lfrfid_cli_emulate(FuriPipeSide* pipe, FuriString* args) {
     protocol_dict_free(dict);
 }
 
-static void lfrfid_cli_raw_analyze(FuriPipeSide* pipe, FuriString* args) {
+static void lfrfid_cli_raw_analyze(PipeSide* pipe, FuriString* args) {
     UNUSED(pipe);
     FuriString *filepath, *info_string;
     filepath = furi_string_alloc();
@@ -392,7 +393,7 @@ static void lfrfid_cli_raw_read_callback(LFRFIDWorkerReadRawResult result, void*
     furi_event_flag_set(event, 1 << result);
 }
 
-static void lfrfid_cli_raw_read(FuriPipeSide* pipe, FuriString* args) {
+static void lfrfid_cli_raw_read(PipeSide* pipe, FuriString* args) {
     FuriString *filepath, *type_string;
     filepath = furi_string_alloc();
     type_string = furi_string_alloc();
@@ -477,7 +478,7 @@ static void lfrfid_cli_raw_emulate_callback(LFRFIDWorkerEmulateRawResult result,
     furi_event_flag_set(event, 1 << result);
 }
 
-static void lfrfid_cli_raw_emulate(FuriPipeSide* pipe, FuriString* args) {
+static void lfrfid_cli_raw_emulate(PipeSide* pipe, FuriString* args) {
     FuriString* filepath;
     filepath = furi_string_alloc();
     Storage* storage = furi_record_open(RECORD_STORAGE);
@@ -544,7 +545,7 @@ static void lfrfid_cli_raw_emulate(FuriPipeSide* pipe, FuriString* args) {
     furi_string_free(filepath);
 }
 
-static void lfrfid_cli(FuriPipeSide* pipe, FuriString* args, void* context) {
+static void lfrfid_cli(PipeSide* pipe, FuriString* args, void* context) {
     UNUSED(context);
     FuriString* cmd;
     cmd = furi_string_alloc();

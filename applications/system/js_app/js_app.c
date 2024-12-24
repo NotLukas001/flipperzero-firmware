@@ -5,6 +5,7 @@
 #include <toolbox/path.h>
 #include <assets_icons.h>
 #include <cli/cli.h>
+#include <toolbox/pipe.h>
 
 #define TAG "JS app"
 
@@ -131,14 +132,14 @@ int32_t js_app(void* arg) {
 } //-V773
 
 typedef struct {
-    FuriPipeSide* pipe;
+    PipeSide* pipe;
     FuriSemaphore* exit_sem;
 } JsCliContext;
 
 static void js_cli_print(JsCliContext* ctx, const char* msg) {
     UNUSED(ctx);
     UNUSED(msg);
-    furi_pipe_send(ctx->pipe, msg, strlen(msg), FuriWaitForever);
+    pipe_send(ctx->pipe, msg, strlen(msg), FuriWaitForever);
 }
 
 static void js_cli_exit(JsCliContext* ctx) {
@@ -172,7 +173,7 @@ static void js_cli_callback(JsThreadEvent event, const char* msg, void* context)
     }
 }
 
-void js_cli_execute(FuriPipeSide* pipe, FuriString* args, void* context) {
+void js_cli_execute(PipeSide* pipe, FuriString* args, void* context) {
     UNUSED(context);
 
     const char* path = furi_string_get_cstr(args);

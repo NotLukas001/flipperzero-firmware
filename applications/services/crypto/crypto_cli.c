@@ -2,6 +2,7 @@
 #include <furi.h>
 
 #include <lib/toolbox/args.h>
+#include <toolbox/pipe.h>
 #include <cli/cli.h>
 
 void crypto_cli_print_usage(void) {
@@ -17,7 +18,7 @@ void crypto_cli_print_usage(void) {
         "\tstore_key <key_slot:int> <key_type:str> <key_size:int> <key_data:hex>\t - Store key in secure enclave. !!! NON-REVERSABLE OPERATION - READ MANUAL FIRST !!!\r\n");
 }
 
-void crypto_cli_encrypt(FuriPipeSide* pipe, FuriString* args) {
+void crypto_cli_encrypt(PipeSide* pipe, FuriString* args) {
     int key_slot = 0;
     bool key_loaded = false;
     uint8_t iv[16];
@@ -44,7 +45,7 @@ void crypto_cli_encrypt(FuriPipeSide* pipe, FuriString* args) {
         FuriString* input;
         input = furi_string_alloc();
         char c;
-        while(furi_pipe_receive(pipe, (uint8_t*)&c, 1, FuriWaitForever) == 1) {
+        while(pipe_receive(pipe, (uint8_t*)&c, 1, FuriWaitForever) == 1) {
             if(c == CliKeyETX) {
                 printf("\r\n");
                 break;
@@ -92,7 +93,7 @@ void crypto_cli_encrypt(FuriPipeSide* pipe, FuriString* args) {
     }
 }
 
-void crypto_cli_decrypt(FuriPipeSide* pipe, FuriString* args) {
+void crypto_cli_decrypt(PipeSide* pipe, FuriString* args) {
     int key_slot = 0;
     bool key_loaded = false;
     uint8_t iv[16];
@@ -119,7 +120,7 @@ void crypto_cli_decrypt(FuriPipeSide* pipe, FuriString* args) {
         FuriString* hex_input;
         hex_input = furi_string_alloc();
         char c;
-        while(furi_pipe_receive(pipe, (uint8_t*)&c, 1, FuriWaitForever) == 1) {
+        while(pipe_receive(pipe, (uint8_t*)&c, 1, FuriWaitForever) == 1) {
             if(c == CliKeyETX) {
                 printf("\r\n");
                 break;
@@ -164,7 +165,7 @@ void crypto_cli_decrypt(FuriPipeSide* pipe, FuriString* args) {
     }
 }
 
-void crypto_cli_has_key(FuriPipeSide* pipe, FuriString* args) {
+void crypto_cli_has_key(PipeSide* pipe, FuriString* args) {
     UNUSED(pipe);
     int key_slot = 0;
     uint8_t iv[16] = {0};
@@ -186,7 +187,7 @@ void crypto_cli_has_key(FuriPipeSide* pipe, FuriString* args) {
     } while(0);
 }
 
-void crypto_cli_store_key(FuriPipeSide* pipe, FuriString* args) {
+void crypto_cli_store_key(PipeSide* pipe, FuriString* args) {
     UNUSED(pipe);
     int key_slot = 0;
     int key_size = 0;
@@ -279,7 +280,7 @@ void crypto_cli_store_key(FuriPipeSide* pipe, FuriString* args) {
     furi_string_free(key_type);
 }
 
-static void crypto_cli(FuriPipeSide* pipe, FuriString* args, void* context) {
+static void crypto_cli(PipeSide* pipe, FuriString* args, void* context) {
     UNUSED(context);
     FuriString* cmd;
     cmd = furi_string_alloc();

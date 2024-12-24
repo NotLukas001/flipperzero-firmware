@@ -3,12 +3,13 @@
 
 #include <cli/cli.h>
 #include <toolbox/args.h>
+#include <toolbox/pipe.h>
 
 #include <ibutton/ibutton_key.h>
 #include <ibutton/ibutton_worker.h>
 #include <ibutton/ibutton_protocols.h>
 
-static void ibutton_cli(FuriPipeSide* pipe, FuriString* args, void* context);
+static void ibutton_cli(PipeSide* pipe, FuriString* args, void* context);
 
 // app cli function
 void ibutton_on_system_start(void) {
@@ -92,7 +93,7 @@ static void ibutton_cli_worker_read_cb(void* context) {
     furi_event_flag_set(event, EVENT_FLAG_IBUTTON_COMPLETE);
 }
 
-static void ibutton_cli_read(FuriPipeSide* pipe) {
+static void ibutton_cli_read(PipeSide* pipe) {
     iButtonProtocols* protocols = ibutton_protocols_alloc();
     iButtonWorker* worker = ibutton_worker_alloc(protocols);
     iButtonKey* key = ibutton_key_alloc(ibutton_protocols_get_max_data_size(protocols));
@@ -138,7 +139,7 @@ static void ibutton_cli_worker_write_cb(void* context, iButtonWorkerWriteResult 
     furi_event_flag_set(write_context->event, EVENT_FLAG_IBUTTON_COMPLETE);
 }
 
-void ibutton_cli_write(FuriPipeSide* pipe, FuriString* args) {
+void ibutton_cli_write(PipeSide* pipe, FuriString* args) {
     iButtonProtocols* protocols = ibutton_protocols_alloc();
     iButtonWorker* worker = ibutton_worker_alloc(protocols);
     iButtonKey* key = ibutton_key_alloc(ibutton_protocols_get_max_data_size(protocols));
@@ -195,7 +196,7 @@ void ibutton_cli_write(FuriPipeSide* pipe, FuriString* args) {
     furi_event_flag_free(write_context.event);
 }
 
-void ibutton_cli_emulate(FuriPipeSide* pipe, FuriString* args) {
+void ibutton_cli_emulate(PipeSide* pipe, FuriString* args) {
     iButtonProtocols* protocols = ibutton_protocols_alloc();
     iButtonWorker* worker = ibutton_worker_alloc(protocols);
     iButtonKey* key = ibutton_key_alloc(ibutton_protocols_get_max_data_size(protocols));
@@ -228,7 +229,7 @@ void ibutton_cli_emulate(FuriPipeSide* pipe, FuriString* args) {
     ibutton_protocols_free(protocols);
 }
 
-void ibutton_cli(FuriPipeSide* pipe, FuriString* args, void* context) {
+void ibutton_cli(PipeSide* pipe, FuriString* args, void* context) {
     UNUSED(context);
     FuriString* cmd;
     cmd = furi_string_alloc();

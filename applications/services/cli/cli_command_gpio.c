@@ -3,6 +3,7 @@
 #include <furi.h>
 #include <furi_hal.h>
 #include <lib/toolbox/args.h>
+#include <toolbox/pipe.h>
 
 void cli_command_gpio_print_usage(void) {
     printf("Usage:\r\n");
@@ -70,7 +71,7 @@ static GpioParseReturn gpio_command_parse(FuriString* args, size_t* pin_num, uin
     return ret;
 }
 
-void cli_command_gpio_mode(FuriPipeSide* pipe, FuriString* args, void* context) {
+void cli_command_gpio_mode(PipeSide* pipe, FuriString* args, void* context) {
     UNUSED(pipe);
     UNUSED(context);
 
@@ -110,7 +111,7 @@ void cli_command_gpio_mode(FuriPipeSide* pipe, FuriString* args, void* context) 
     }
 }
 
-void cli_command_gpio_read(FuriPipeSide* pipe, FuriString* args, void* context) {
+void cli_command_gpio_read(PipeSide* pipe, FuriString* args, void* context) {
     UNUSED(pipe);
     UNUSED(context);
 
@@ -131,7 +132,7 @@ void cli_command_gpio_read(FuriPipeSide* pipe, FuriString* args, void* context) 
     printf("Pin %s <= %u", gpio_pins[num].name, val);
 }
 
-void cli_command_gpio_set(FuriPipeSide* pipe, FuriString* args, void* context) {
+void cli_command_gpio_set(PipeSide* pipe, FuriString* args, void* context) {
     UNUSED(pipe);
     UNUSED(context);
 
@@ -171,7 +172,7 @@ void cli_command_gpio_set(FuriPipeSide* pipe, FuriString* args, void* context) {
     printf("Pin %s => %u", gpio_pins[num].name, !!value);
 }
 
-void cli_command_gpio(FuriPipeSide* pipe, FuriString* args, void* context) {
+void cli_command_gpio(PipeSide* pipe, FuriString* args, void* context) {
     FuriString* cmd;
     cmd = furi_string_alloc();
 

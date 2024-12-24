@@ -5,6 +5,7 @@
 #include <furi_hal_version.h>
 #include <m-array.h>
 #include <loader/loader.h>
+#include <toolbox/pipe.h>
 
 #define TAG "CliShell"
 
@@ -21,7 +22,7 @@ typedef struct {
     Cli* cli;
 
     FuriEventLoop* event_loop;
-    FuriPipeSide* pipe;
+    PipeSide* pipe;
     CliAnsiParser* ansi_parser;
     FuriEventLoopTimer* ansi_parsing_timer;
 
@@ -36,14 +37,14 @@ typedef struct {
 
 typedef struct {
     CliCommand* command;
-    FuriPipeSide* pipe;
+    PipeSide* pipe;
     FuriString* args;
 } CliCommandThreadData;
 
 static int32_t cli_command_thread(void* context) {
     CliCommandThreadData* thread_data = context;
     if(!(thread_data->command->flags & CliCommandFlagDontAttachStdio))
-        furi_pipe_install_as_stdio(thread_data->pipe);
+        pipe_install_as_stdio(thread_data->pipe);
 
     thread_data->command->execute_callback(
         thread_data->pipe, thread_data->args, thread_data->command->context);
@@ -101,13 +102,6 @@ static void cli_shell_execute_command(CliShell* cli_shell, FuriString* command) 
 
     // unlock loader
     if(command_data.flags & CliCommandFlagParallelUnsafe) loader_unlock(loader);
-}
-
-static void cli_shell_tick(void* context) {
-    CliShell* cli_shell = context;
-    if(furi_pipe_state(cli_shell->pipe) == FuriPipeStateBroken) {
-        furi_event_loop_stop(cli_shell->event_loop);
-    }
 }
 
 static size_t cli_shell_prompt_length(CliShell* cli_shell) {
@@ -627,8 +621,14 @@ static void cli_shell_process_key(CliShell* cli_shell, CliKeyCombo key_combo) {
     }
 }
 
-static void cli_shell_data_available(FuriEventLoopObject* object, void* context) {
-    UNUSED(object);
+static void cli_shell_pipe_broken(PipeSide* pipe, void* context) {
+    UNUSED(pipe);
+    CliShell* cli_shell = context;
+    furi_event_loop_stop(cli_shell->event_loop);
+}
+
+static void cli_shell_data_available(PipeSide* pipe, void* context) {
+    UNUSED(pipe);
     CliShell* cli_shell = context;
 
     furi_event_loop_timer_start(cli_shell->ansi_parsing_timer, furi_ms_to_ticks(ANSI_TIMEOUT_MS));
@@ -654,7 +654,7 @@ static void cli_shell_timer_expired(void* context) {
     cli_shell_process_key(cli_shell, key_combo);
 }
 
-static CliShell* cli_shell_alloc(FuriPipeSide* pipe) {
+static CliShell* cli_shell_alloc(PipeSide* pipe) {
     CliShell* cli_shell = malloc(sizeof(CliShell));
     cli_shell->cli = furi_record_open(RECORD_CLI);
     cli_shell->ansi_parser = cli_ansi_parser_alloc();
@@ -664,22 +664,18 @@ static CliShell* cli_shell_alloc(FuriPipeSide* pipe) {
     ShellHistory_push_at(cli_shell->history, 0, new_command);
     furi_string_free(new_command);
 
-    cli_shell->pipe = pipe;
-    furi_pipe_install_as_stdio(cli_shell->pipe);
-    furi_event_loop_subscribe_pipe(
-        cli_shell->event_loop,
-        cli_shell->pipe,
-        FuriEventLoopEventIn,
-        cli_shell_data_available,
-        cli_shell);
+    CommandCompletions_init(cli_shell->completions);
+    cli_shell->selected_completion = 0;
 
     cli_shell->ansi_parsing_timer = furi_event_loop_timer_alloc(
         cli_shell->event_loop, cli_shell_timer_expired, FuriEventLoopTimerTypeOnce, cli_shell);
 
-    furi_event_loop_tick_set(cli_shell->event_loop, 1, cli_shell_tick, cli_shell);
-
-    CommandCompletions_init(cli_shell->completions);
-    cli_shell->selected_completion = 0;
+    cli_shell->pipe = pipe;
+    pipe_install_as_stdio(cli_shell->pipe);
+    pipe_attach_to_event_loop(cli_shell->pipe, cli_shell->event_loop);
+    pipe_set_callback_context(cli_shell->pipe, cli_shell);
+    pipe_set_data_arrived_callback(cli_shell->pipe, cli_shell_data_available, 0);
+    pipe_set_broken_callback(cli_shell->pipe, cli_shell_pipe_broken, FuriEventLoopEventFlagEdge);
 
     return cli_shell;
 }
@@ -687,8 +683,8 @@ static CliShell* cli_shell_alloc(FuriPipeSide* pipe) {
 static void cli_shell_free(CliShell* cli_shell) {
     CommandCompletions_clear(cli_shell->completions);
     furi_event_loop_timer_free(cli_shell->ansi_parsing_timer);
-    furi_event_loop_unsubscribe(cli_shell->event_loop, cli_shell->pipe);
-    furi_pipe_free(cli_shell->pipe);
+    pipe_detach_from_event_loop(cli_shell->pipe);
+    pipe_free(cli_shell->pipe);
     ShellHistory_clear(cli_shell->history);
     furi_event_loop_free(cli_shell->event_loop);
     cli_ansi_parser_free(cli_shell->ansi_parser);
@@ -731,7 +727,7 @@ static void cli_shell_motd(void) {
 }
 
 static int32_t cli_shell_thread(void* context) {
-    FuriPipeSide* pipe = context;
+    PipeSide* pipe = context;
     CliShell* cli_shell = cli_shell_alloc(pipe);
 
     FURI_LOG_D(TAG, "Started");
@@ -744,7 +740,7 @@ static int32_t cli_shell_thread(void* context) {
     return 0;
 }
 
-FuriThread* cli_shell_start(FuriPipeSide* pipe) {
+FuriThread* cli_shell_start(PipeSide* pipe) {
     FuriThread* thread =
         furi_thread_alloc_ex("CliShell", CLI_SHELL_STACK_SIZE, cli_shell_thread, pipe);
     furi_thread_start(thread);

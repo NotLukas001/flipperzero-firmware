@@ -2,11 +2,12 @@
 #include <furi.h>
 #include <rpc/rpc.h>
 #include <furi_hal.h>
+#include <toolbox/pipe.h>
 
 #define TAG "RpcCli"
 
 typedef struct {
-    FuriPipeSide* pipe;
+    PipeSide* pipe;
     bool session_close_request;
     FuriSemaphore* terminate_semaphore;
 } CliRpc;
@@ -20,7 +21,7 @@ static void rpc_cli_send_bytes_callback(void* context, uint8_t* bytes, size_t by
     CliRpc* cli_rpc = context;
 
     while(bytes_len) {
-        size_t sent = furi_pipe_send(cli_rpc->pipe, bytes, bytes_len, FuriWaitForever);
+        size_t sent = pipe_send(cli_rpc->pipe, bytes, bytes_len, FuriWaitForever);
         bytes += sent;
         bytes_len -= sent;
     }
@@ -40,7 +41,7 @@ static void rpc_cli_session_terminated_callback(void* context) {
     furi_semaphore_release(cli_rpc->terminate_semaphore);
 }
 
-void rpc_cli_command_start_session(FuriPipeSide* pipe, FuriString* args, void* context) {
+void rpc_cli_command_start_session(PipeSide* pipe, FuriString* args, void* context) {
     UNUSED(args);
     furi_assert(pipe);
     furi_assert(context);
@@ -69,9 +70,8 @@ void rpc_cli_command_start_session(FuriPipeSide* pipe, FuriString* args, void* c
 
     while(1) {
         size_received =
-            furi_pipe_receive(cli_rpc.pipe, buffer, CLI_READ_BUFFER_SIZE, furi_ms_to_ticks(50));
-        if((furi_pipe_state(cli_rpc.pipe) == FuriPipeStateBroken) ||
-           cli_rpc.session_close_request) {
+            pipe_receive(cli_rpc.pipe, buffer, CLI_READ_BUFFER_SIZE, furi_ms_to_ticks(50));
+        if((pipe_state(cli_rpc.pipe) == PipeStateBroken) || cli_rpc.session_close_request) {
             break;
         }
 

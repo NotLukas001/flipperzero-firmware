@@ -4,6 +4,7 @@
 
 #include <cli/cli.h>
 #include <toolbox/path.h>
+#include <toolbox/pipe.h>
 #include <loader/loader.h>
 #include <storage/storage.h>
 #include <notification/notification_messages.h>
@@ -25,7 +26,7 @@ struct TestRunner {
     NotificationApp* notification;
 
     // Temporary used things
-    FuriPipeSide* pipe;
+    PipeSide* pipe;
     FuriString* args;
 
     // ELF related stuff
@@ -38,7 +39,7 @@ struct TestRunner {
     int minunit_status;
 };
 
-TestRunner* test_runner_alloc(FuriPipeSide* pipe, FuriString* args) {
+TestRunner* test_runner_alloc(PipeSide* pipe, FuriString* args) {
     TestRunner* instance = malloc(sizeof(TestRunner));
 
     instance->storage = furi_record_open(RECORD_STORAGE);

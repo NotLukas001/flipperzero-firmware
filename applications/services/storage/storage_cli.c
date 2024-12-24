@@ -10,6 +10,7 @@
 #include <storage/storage.h>
 #include <storage/storage_sd_api.h>
 #include <power/power_service/power.h>
+#include <toolbox/pipe.h>
 
 #define MAX_NAME_LENGTH 255
 
@@ -19,7 +20,7 @@ static void storage_cli_print_error(FS_Error error) {
     printf("Storage error: %s\r\n", storage_error_get_desc(error));
 }
 
-static void storage_cli_info(FuriPipeSide* pipe, FuriString* path, FuriString* args) {
+static void storage_cli_info(PipeSide* pipe, FuriString* path, FuriString* args) {
     UNUSED(pipe);
     UNUSED(args);
     Storage* api = furi_record_open(RECORD_STORAGE);
@@ -69,7 +70,7 @@ static void storage_cli_info(FuriPipeSide* pipe, FuriString* path, FuriString* a
     furi_record_close(RECORD_STORAGE);
 }
 
-static void storage_cli_format(FuriPipeSide* pipe, FuriString* path, FuriString* args) {
+static void storage_cli_format(PipeSide* pipe, FuriString* path, FuriString* args) {
     UNUSED(pipe);
     UNUSED(args);
     if(furi_string_cmp_str(path, STORAGE_INT_PATH_PREFIX) == 0) {
@@ -97,7 +98,7 @@ static void storage_cli_format(FuriPipeSide* pipe, FuriString* path, FuriString*
     }
 }
 
-static void storage_cli_list(FuriPipeSide* pipe, FuriString* path, FuriString* args) {
+static void storage_cli_list(PipeSide* pipe, FuriString* path, FuriString* args) {
     UNUSED(pipe);
     UNUSED(args);
     if(furi_string_cmp_str(path, "/") == 0) {
@@ -135,7 +136,7 @@ static void storage_cli_list(FuriPipeSide* pipe, FuriString* path, FuriString* a
     }
 }
 
-static void storage_cli_tree(FuriPipeSide* pipe, FuriString* path, FuriString* args) {
+static void storage_cli_tree(PipeSide* pipe, FuriString* path, FuriString* args) {
     UNUSED(args);
     if(furi_string_cmp_str(path, "/") == 0) {
         furi_string_set(path, STORAGE_INT_PATH_PREFIX);
@@ -177,7 +178,7 @@ static void storage_cli_tree(FuriPipeSide* pipe, FuriString* path, FuriString* a
     }
 }
 
-static void storage_cli_read(FuriPipeSide* pipe, FuriString* path, FuriString* args) {
+static void storage_cli_read(PipeSide* pipe, FuriString* path, FuriString* args) {
     UNUSED(pipe);
     UNUSED(args);
     Storage* api = furi_record_open(RECORD_STORAGE);
@@ -209,7 +210,7 @@ static void storage_cli_read(FuriPipeSide* pipe, FuriString* path, FuriString* a
     furi_record_close(RECORD_STORAGE);
 }
 
-static void storage_cli_write(FuriPipeSide* pipe, FuriString* path, FuriString* args) {
+static void storage_cli_write(PipeSide* pipe, FuriString* path, FuriString* args) {
     UNUSED(pipe);
     UNUSED(args);
     Storage* api = furi_record_open(RECORD_STORAGE);
@@ -265,7 +266,7 @@ static void storage_cli_write(FuriPipeSide* pipe, FuriString* path, FuriString* 
     furi_record_close(RECORD_STORAGE);
 }
 
-static void storage_cli_read_chunks(FuriPipeSide* pipe, FuriString* path, FuriString* args) {
+static void storage_cli_read_chunks(PipeSide* pipe, FuriString* path, FuriString* args) {
     UNUSED(pipe);
     Storage* api = furi_record_open(RECORD_STORAGE);
     File* file = storage_file_alloc(api);
@@ -305,7 +306,7 @@ static void storage_cli_read_chunks(FuriPipeSide* pipe, FuriString* path, FuriSt
     furi_record_close(RECORD_STORAGE);
 }
 
-static void storage_cli_write_chunk(FuriPipeSide* pipe, FuriString* path, FuriString* args) {
+static void storage_cli_write_chunk(PipeSide* pipe, FuriString* path, FuriString* args) {
     Storage* api = furi_record_open(RECORD_STORAGE);
     File* file = storage_file_alloc(api);
 
@@ -319,8 +320,8 @@ static void storage_cli_write_chunk(FuriPipeSide* pipe, FuriString* path, FuriSt
             char buffer[256];
 
             while(need_to_read) {
-                size_t read_this_time = furi_pipe_receive(
-                    pipe, buffer, MIN(sizeof(buffer), need_to_read), FuriWaitForever);
+                size_t read_this_time =
+                    pipe_receive(pipe, buffer, MIN(sizeof(buffer), need_to_read), FuriWaitForever);
                 size_t wrote_this_time = storage_file_write(file, buffer, read_this_time);
 
                 if(wrote_this_time != read_this_time) {
@@ -339,7 +340,7 @@ static void storage_cli_write_chunk(FuriPipeSide* pipe, FuriString* path, FuriSt
     furi_record_close(RECORD_STORAGE);
 }
 
-static void storage_cli_stat(FuriPipeSide* pipe, FuriString* path, FuriString* args) {
+static void storage_cli_stat(PipeSide* pipe, FuriString* path, FuriString* args) {
     UNUSED(pipe);
     UNUSED(args);
     Storage* api = furi_record_open(RECORD_STORAGE);
@@ -381,7 +382,7 @@ static void storage_cli_stat(FuriPipeSide* pipe, FuriString* path, FuriString* a
     furi_record_close(RECORD_STORAGE);
 }
 
-static void storage_cli_timestamp(FuriPipeSide* pipe, FuriString* path, FuriString* args) {
+static void storage_cli_timestamp(PipeSide* pipe, FuriString* path, FuriString* args) {
     UNUSED(pipe);
     UNUSED(args);
     Storage* api = furi_record_open(RECORD_STORAGE);
@@ -398,7 +399,7 @@ static void storage_cli_timestamp(FuriPipeSide* pipe, FuriString* path, FuriStri
     furi_record_close(RECORD_STORAGE);
 }
 
-static void storage_cli_copy(FuriPipeSide* pipe, FuriString* old_path, FuriString* args) {
+static void storage_cli_copy(PipeSide* pipe, FuriString* old_path, FuriString* args) {
     UNUSED(pipe);
     Storage* api = furi_record_open(RECORD_STORAGE);
     FuriString* new_path;
@@ -419,7 +420,7 @@ static void storage_cli_copy(FuriPipeSide* pipe, FuriString* old_path, FuriStrin
     furi_record_close(RECORD_STORAGE);
 }
 
-static void storage_cli_remove(FuriPipeSide* pipe, FuriString* path, FuriString* args) {
+static void storage_cli_remove(PipeSide* pipe, FuriString* path, FuriString* args) {
     UNUSED(pipe);
     UNUSED(args);
     Storage* api = furi_record_open(RECORD_STORAGE);
@@ -432,7 +433,7 @@ static void storage_cli_remove(FuriPipeSide* pipe, FuriString* path, FuriString*
     furi_record_close(RECORD_STORAGE);
 }
 
-static void storage_cli_rename(FuriPipeSide* pipe, FuriString* old_path, FuriString* args) {
+static void storage_cli_rename(PipeSide* pipe, FuriString* old_path, FuriString* args) {
     UNUSED(pipe);
     Storage* api = furi_record_open(RECORD_STORAGE);
     FuriString* new_path;
@@ -453,7 +454,7 @@ static void storage_cli_rename(FuriPipeSide* pipe, FuriString* old_path, FuriStr
     furi_record_close(RECORD_STORAGE);
 }
 
-static void storage_cli_mkdir(FuriPipeSide* pipe, FuriString* path, FuriString* args) {
+static void storage_cli_mkdir(PipeSide* pipe, FuriString* path, FuriString* args) {
     UNUSED(pipe);
     UNUSED(args);
     Storage* api = furi_record_open(RECORD_STORAGE);
@@ -466,7 +467,7 @@ static void storage_cli_mkdir(FuriPipeSide* pipe, FuriString* path, FuriString* 
     furi_record_close(RECORD_STORAGE);
 }
 
-static void storage_cli_md5(FuriPipeSide* pipe, FuriString* path, FuriString* args) {
+static void storage_cli_md5(PipeSide* pipe, FuriString* path, FuriString* args) {
     UNUSED(pipe);
     UNUSED(args);
     Storage* api = furi_record_open(RECORD_STORAGE);
@@ -493,7 +494,7 @@ static bool tar_extract_file_callback(const char* name, bool is_directory, void*
     return true;
 }
 
-static void storage_cli_extract(FuriPipeSide* pipe, FuriString* old_path, FuriString* args) {
+static void storage_cli_extract(PipeSide* pipe, FuriString* old_path, FuriString* args) {
     UNUSED(pipe);
     FuriString* new_path = furi_string_alloc();
 
@@ -528,7 +529,7 @@ static void storage_cli_extract(FuriPipeSide* pipe, FuriString* old_path, FuriSt
     furi_record_close(RECORD_STORAGE);
 }
 
-typedef void (*StorageCliCommandCallback)(FuriPipeSide* pipe, FuriString* path, FuriString* args);
+typedef void (*StorageCliCommandCallback)(PipeSide* pipe, FuriString* path, FuriString* args);
 
 typedef struct {
     const char* command;
@@ -633,7 +634,7 @@ static void storage_cli_print_usage(void) {
     }
 }
 
-void storage_cli(FuriPipeSide* pipe, FuriString* args, void* context) {
+void storage_cli(PipeSide* pipe, FuriString* args, void* context) {
     UNUSED(context);
     FuriString* cmd;
     FuriString* path;
@@ -669,7 +670,7 @@ void storage_cli(FuriPipeSide* pipe, FuriString* args, void* context) {
     furi_string_free(cmd);
 }
 
-static void storage_cli_factory_reset(FuriPipeSide* pipe, FuriString* args, void* context) {
+static void storage_cli_factory_reset(PipeSide* pipe, FuriString* args, void* context) {
     UNUSED(pipe);
     UNUSED(args);
     UNUSED(context);
