@@ -4,6 +4,8 @@
 #include "cli_ansi.h"
 #include <toolbox/pipe.h>
 
+#define TAG "cli"
+
 struct Cli {
     CliCommandTree_t commands;
     FuriMutex* mutex;
@@ -32,10 +34,10 @@ void cli_add_command(
     furi_check(furi_string_search_char(name_str, ' ') == FURI_STRING_FAILURE);
 
     CliCommand command = {
-        .name = name,
         .context = context,
         .execute_callback = callback,
         .flags = flags,
+        .stack_depth = CLI_BUILTIN_COMMAND_STACK_SIZE,
     };
 
     furi_check(furi_mutex_acquire(cli->mutex, FuriWaitForever) == FuriStatusOk);
@@ -72,6 +74,53 @@ bool cli_get_command(Cli* cli, FuriString* command, CliCommand* result) {
     furi_check(furi_mutex_release(cli->mutex) == FuriStatusOk);
 
     return !!data;
+}
+
+void cli_enumerate_external_commands(Cli* cli) {
+    furi_check(cli);
+    furi_check(furi_mutex_acquire(cli->mutex, FuriWaitForever) == FuriStatusOk);
+    FURI_LOG_D(TAG, "Enumerating external commands");
+
+    // remove external commands
+    CliCommandTree_t internal_cmds;
+    CliCommandTree_init(internal_cmds);
+    for
+        M_EACH(item, cli->commands, CliCommandTree_t) {
+            if(!(item->value_ptr->flags & CliCommandFlagExternal))
+                CliCommandTree_set_at(internal_cmds, *item->key_ptr, *item->value_ptr);
+        }
+    CliCommandTree_move(cli->commands, internal_cmds);
+
+    // iterate over files in plugin directory
+    Storage* storage = furi_record_open(RECORD_STORAGE);
+    File* plogin_dir = storage_file_alloc(storage);
+
+    if(storage_dir_open(plogin_dir, CLI_COMMANDS_PATH)) {
+        char plugin_filename[64];
+        FuriString* plugin_name = furi_string_alloc();
+
+        while(storage_dir_read(plogin_dir, NULL, plugin_filename, sizeof(plugin_filename))) {
+            FURI_LOG_T(TAG, "Plugin: %s", plugin_filename);
+            furi_string_set_str(plugin_name, plugin_filename);
+            furi_string_replace_all_str(plugin_name, ".fal", "");
+            furi_string_replace_at(plugin_name, 0, 4, ""); // remove "cli_" in the beginning
+            CliCommand command = {
+                .context = NULL,
+                .execute_callback = NULL,
+                .flags = CliCommandFlagExternal,
+            };
+            CliCommandTree_set_at(cli->commands, plugin_name, command);
+        }
+
+        furi_string_free(plugin_name);
+    }
+
+    storage_dir_close(plogin_dir);
+    storage_file_free(plogin_dir);
+    furi_record_close(RECORD_STORAGE);
+
+    FURI_LOG_D(TAG, "Finished enumerating external commands");
+    furi_check(furi_mutex_release(cli->mutex) == FuriStatusOk);
 }
 
 void cli_lock_commands(Cli* cli) {

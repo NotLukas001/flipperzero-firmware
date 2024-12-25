@@ -1,11 +1,14 @@
 #include "cli_shell.h"
 #include "cli_ansi.h"
 #include "cli_i.h"
+#include "cli_commands.h"
 #include <stdio.h>
 #include <furi_hal_version.h>
 #include <m-array.h>
 #include <loader/loader.h>
 #include <toolbox/pipe.h>
+#include <flipper_application/plugins/plugin_manager.h>
+#include <loader/firmware_api/firmware_api.h>
 
 #define TAG "CliShell"
 
@@ -62,46 +65,80 @@ static void cli_shell_execute_command(CliShell* cli_shell, FuriString* command) 
     FuriString* args = furi_string_alloc_set(command);
     furi_string_right(args, space + 1);
 
-    // find handler
+    PluginManager* plugin_manager = NULL;
+    Loader* loader = NULL;
     CliCommand command_data;
-    if(!cli_get_command(cli_shell->cli, command_name, &command_data)) {
-        printf(
-            ANSI_FG_RED "could not find command `%s`" ANSI_RESET,
-            furi_string_get_cstr(command_name));
-        return;
-    }
 
-    // lock loader
-    Loader* loader = furi_record_open(RECORD_LOADER);
-    if(command_data.flags & CliCommandFlagParallelUnsafe) {
-        bool success = loader_lock(loader);
-        if(!success) {
-            printf(ANSI_FG_RED
-                   "this command cannot be run while an application is open" ANSI_RESET);
-            return;
+    do {
+        // find handler
+        if(!cli_get_command(cli_shell->cli, command_name, &command_data)) {
+            printf(
+                ANSI_FG_RED "could not find command `%s`, try `help`" ANSI_RESET,
+                furi_string_get_cstr(command_name));
+            break;
         }
-    }
 
-    // run command in separate thread
-    CliCommandThreadData thread_data = {
-        .command = &command_data,
-        .pipe = cli_shell->pipe,
-        .args = args,
-    };
-    FuriThread* thread = furi_thread_alloc_ex(
-        furi_string_get_cstr(command_name),
-        CLI_COMMAND_STACK_SIZE,
-        cli_command_thread,
-        &thread_data);
-    furi_thread_start(thread);
-    furi_thread_join(thread);
-    furi_thread_free(thread);
+        // load external command
+        if(command_data.flags & CliCommandFlagExternal) {
+            plugin_manager =
+                plugin_manager_alloc(PLUGIN_APP_ID, PLUGIN_API_VERSION, firmware_api_interface);
+            FuriString* path = furi_string_alloc_printf(
+                "%s/cli_%s.fal", CLI_COMMANDS_PATH, furi_string_get_cstr(command_name));
+            uint32_t plugin_cnt_last = plugin_manager_get_count(plugin_manager);
+            PluginManagerError error =
+                plugin_manager_load_single(plugin_manager, furi_string_get_cstr(path));
+            furi_string_free(path);
+
+            if(error != PluginManagerErrorNone) {
+                printf(ANSI_FG_RED "failed to load external command" ANSI_RESET);
+                break;
+            }
+
+            const CliCommandDescriptor* plugin =
+                plugin_manager_get_ep(plugin_manager, plugin_cnt_last);
+            furi_assert(plugin);
+            furi_check(furi_string_cmp_str(command_name, plugin->name) == 0);
+            command_data.execute_callback = plugin->execute_callback;
+            command_data.flags = plugin->flags | CliCommandFlagExternal;
+            command_data.stack_depth = plugin->stack_depth;
+        }
+
+        // lock loader
+        if(command_data.flags & CliCommandFlagParallelUnsafe) {
+            loader = furi_record_open(RECORD_LOADER);
+            bool success = loader_lock(loader);
+            if(!success) {
+                printf(ANSI_FG_RED
+                       "this command cannot be run while an application is open" ANSI_RESET);
+                break;
+            }
+        }
+
+        // run command in separate thread
+        CliCommandThreadData thread_data = {
+            .command = &command_data,
+            .pipe = cli_shell->pipe,
+            .args = args,
+        };
+        FuriThread* thread = furi_thread_alloc_ex(
+            furi_string_get_cstr(command_name),
+            command_data.stack_depth,
+            cli_command_thread,
+            &thread_data);
+        furi_thread_start(thread);
+        furi_thread_join(thread);
+        furi_thread_free(thread);
+    } while(0);
 
     furi_string_free(command_name);
     furi_string_free(args);
 
     // unlock loader
-    if(command_data.flags & CliCommandFlagParallelUnsafe) loader_unlock(loader);
+    if(loader) loader_unlock(loader);
+    furi_record_close(RECORD_LOADER);
+
+    // unload external command
+    if(plugin_manager) plugin_manager_free(plugin_manager);
 }
 
 static size_t cli_shell_prompt_length(CliShell* cli_shell) {
@@ -731,6 +768,7 @@ static int32_t cli_shell_thread(void* context) {
     CliShell* cli_shell = cli_shell_alloc(pipe);
 
     FURI_LOG_D(TAG, "Started");
+    cli_enumerate_external_commands(cli_shell->cli);
     cli_shell_motd();
     cli_shell_prompt(cli_shell);
     furi_event_loop_run(cli_shell->event_loop);

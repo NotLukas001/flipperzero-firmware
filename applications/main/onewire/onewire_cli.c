@@ -6,7 +6,7 @@
 
 #include <one_wire/one_wire_host.h>
 
-static void onewire_cli(Cli* cli, FuriString* args, void* context);
+static void onewire_cli(PipeSide* pipe, FuriString* args, void* context);
 
 void onewire_on_system_start(void) {
 #ifdef SRV_CLI
@@ -23,8 +23,8 @@ static void onewire_cli_print_usage(void) {
     printf("onewire search\r\n");
 }
 
-static void onewire_cli_search(Cli* cli) {
-    UNUSED(cli);
+static void onewire_cli_search(PipeSide* pipe) {
+    UNUSED(pipe);
     OneWireHost* onewire = onewire_host_alloc(&gpio_ibutton);
     uint8_t address[8];
     bool done = false;
@@ -53,7 +53,7 @@ static void onewire_cli_search(Cli* cli) {
     onewire_host_free(onewire);
 }
 
-void onewire_cli(Cli* cli, FuriString* args, void* context) {
+void onewire_cli(PipeSide* pipe, FuriString* args, void* context) {
     UNUSED(context);
     FuriString* cmd;
     cmd = furi_string_alloc();
@@ -65,7 +65,7 @@ void onewire_cli(Cli* cli, FuriString* args, void* context) {
     }
 
     if(furi_string_cmp_str(cmd, "search") == 0) {
-        onewire_cli_search(cli);
+        onewire_cli_search(pipe);
     }
 
     furi_string_free(cmd);

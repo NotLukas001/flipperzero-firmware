@@ -13,11 +13,14 @@
 extern "C" {
 #endif
 
+#define CLI_BUILTIN_COMMAND_STACK_SIZE (3 * 1024U)
+#define CLI_COMMANDS_PATH              "/ext/apps_data/cli/plugins"
+
 typedef struct {
-    const char* name; //<! Command name
     void* context; //<! Context passed to callbacks
     CliExecuteCallback execute_callback; //<! Callback for command execution
     CliCommandFlag flags;
+    size_t stack_depth;
 } CliCommand;
 
 #define CLI_COMMANDS_TREE_RANK 4
